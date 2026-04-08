@@ -5,9 +5,9 @@ from pathlib import Path
 
 from hackersec.worker.celery_app import celery_app
 from hackersec.db import store
-# from hackersec.analysis.static import run_static_analysis
-# from hackersec.analysis.dedup import dedup_findings, summarize_findings
-# from hackersec.ingestion.git_clone import clone_repo
+from hackersec.analysis.static import run_static_analysis
+from hackersec.analysis.dedup import dedup_findings, summarize_findings
+from hackersec.ingestion.git_clone import clone_repo
 
 logger = logging.getLogger(__name__)
 
@@ -20,11 +20,28 @@ def run_analysis(self, job_id: str, target: str, target_type: str):
     tmpdir = Path(tempfile.mkdtemp(prefix="hackersec_"))
 
     try:
-        # Stub implementation for Wave 1 testing
-        logger.info(f"[{job_id}] Stub analysis on {target}")
-        
-        # Step 4: Store results
-        findings = []
+        # ── Step 1: Prepare target path ──────────────────────────────────
+        if target_type == "git_url":
+            logger.info(f"[{job_id}] Cloning {target}")
+            target_path = clone_repo(target, tmpdir / "repo")
+        else:
+            target_path = Path(target)
+            if not target_path.exists():
+                raise FileNotFoundError(f"Uploaded file not found: {target}")
+
+        # ── Step 2: Static analysis ───────────────────────────────────────
+        logger.info(f"[{job_id}] Running static analysis on {target_path}")
+        raw_findings = run_static_analysis(target_path, job_id=job_id)
+        logger.info(f"[{job_id}] Raw findings: {len(raw_findings)}")
+
+        # ── Step 3: Deduplication ─────────────────────────────────────────
+        findings = dedup_findings(raw_findings)
+        logger.info(f"[{job_id}] After dedup: {len(findings)} findings")
+
+        summary = summarize_findings(findings)
+        logger.info(f"[{job_id}] Summary: {summary}")
+
+        # ── Step 4: Store results ─────────────────────────────────────────
         store.save_findings(job_id, findings)
         store.update_job(job_id, status="complete", finding_count=len(findings))
         logger.info(f"[{job_id}] Analysis complete")
