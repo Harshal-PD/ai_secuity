@@ -22,3 +22,6 @@ init-db:
 
 start-joern:
 	joern --server --port 9000
+
+seed-kb:
+	python hackersec/ingestion/seed_kb.py
