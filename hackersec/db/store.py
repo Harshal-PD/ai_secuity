@@ -33,21 +33,21 @@ class Job(Base):
 
 class FindingRecord(Base):
     __tablename__ = "findings"
-    id = Column(String, primary_key=True)
-    job_id = Column(String, ForeignKey("jobs.id"))
-    file_path = Column(Text)
+    id = Column(String(50), primary_key=True)
+    job_id = Column(String(50), index=True)
+    file_path = Column(String(255))
     line_start = Column(Integer)
     line_end = Column(Integer)
-    rule_id = Column(String)
-    tool = Column(String)
-    severity = Column(String)
+    rule_id = Column(String(100))
+    tool = Column(String(50))
+    severity = Column(String(20))
     message = Column(Text)
-    cwe_ids = Column(Text, default="[]")     # JSON array string
-    owasp_category = Column(Text, nullable=True)
+    cwe_ids = Column(Text, nullable=True)  # JSON list
+    owasp_category = Column(String(255), nullable=True)
     code_snippet = Column(Text, nullable=True)
-    cpg_context = Column(Text, nullable=True)   # JSON
-    rag_docs = Column(Text, nullable=True)      # JSON
-    llm_analysis = Column(Text, nullable=True)  # JSON
+    cpg_context = Column(Text, nullable=True)  # JSON dict
+    rag_docs = Column(Text, nullable=True)     # JSON list 
+    llm_analysis = Column(Text, nullable=True) # JSON dict
     fusion_verdict = Column(Text, nullable=True)
     patch = Column(Text, nullable=True)
 
@@ -110,6 +110,7 @@ def save_findings(job_id: str, findings: list) -> None:
                 code_snippet=f.code_snippet,
                 cpg_context=json.dumps(f.cpg_context) if f.cpg_context else None,
                 rag_docs=json.dumps(f.rag_docs) if f.rag_docs else None,
+                llm_analysis=json.dumps(f.llm_analysis) if getattr(f, 'llm_analysis', None) else None,
             )
             db.add(record)
         db.commit()
@@ -134,6 +135,7 @@ def get_findings(job_id: str) -> list[dict]:
                 "code_snippet": r.code_snippet,
                 "cpg_context": json.loads(r.cpg_context) if r.cpg_context else None,
                 "rag_docs": json.loads(r.rag_docs) if r.rag_docs else None,
+                "llm_analysis": json.loads(r.llm_analysis) if r.llm_analysis else None,
                 "fusion_verdict": r.fusion_verdict,
             }
             for r in records

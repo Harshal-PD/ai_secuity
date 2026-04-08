@@ -88,6 +88,36 @@ def run_analysis(self, job_id: str, target: str, target_type: str):
             for f in findings:
                 if not f.rag_docs:
                     f.rag_docs = []
+                    
+        # ── Step 3.8: LLM Reasoning ───────────────────────────────────────
+        from hackersec.analysis.llm.client import OllamaClient
+        from hackersec.analysis.llm.prompter import build_analysis_prompt
+        from hackersec.analysis.llm.parser import parse_llm_response
+        
+        try:
+            llm_client = OllamaClient()
+            for f in findings:
+                # Compile strict bounds
+                prompt = build_analysis_prompt(f)
+                logger.info(f"[{job_id}] Evaluating findings against Ollama for {f.file_path}:{f.line_start}")
+                
+                # Fetch text mappings
+                llm_res = llm_client.generate(prompt)
+                
+                # Map LLM statuses or structure validation blocks
+                if llm_res["llm_status"] == "success":
+                     parsed = parse_llm_response(llm_res["response"])
+                     f.llm_analysis = parsed
+                else:
+                     f.llm_analysis = {"llm_status": llm_res["llm_status"], "error": llm_res.get("error")}
+                     
+            logger.info(f"[{job_id}] LLM structured mapping complete")
+            
+        except Exception as e:
+            logger.error(f"[{job_id}] LLM pipeline gracefully bounded exceptions: {e}")
+            for f in findings:
+                if not getattr(f, 'llm_analysis', None):
+                    f.llm_analysis = {"llm_status": "failed_connection", "error": str(e)}
 
         # ── Step 4: Store results ─────────────────────────────────────────
         store.save_findings(job_id, findings)
