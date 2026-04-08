@@ -143,6 +143,39 @@ def run_analysis(self, job_id: str, target: str, target_type: str):
                  if not f.fusion_verdict:
                      f.fusion_verdict = "uncertain"
 
+        # ── Step 3.10: Patch Generation ───────────────────────────────────
+        from hackersec.analysis.patch import build_patch_prompt, parse_patch, compute_diff, validate_patch
+        
+        try:
+            llm_client = OllamaClient() # Reuse Ollama client initialized in 3.8
+            for f in findings:
+                if f.fusion_verdict == "true_positive" and f.code_snippet:
+                    logger.info(f"[{job_id}] Generating patch for true positive at {f.file_path}:{f.line_start}")
+                    
+                    prompt = build_patch_prompt(f)
+                    llm_res = llm_client.generate(prompt)
+                    
+                    if llm_res["llm_status"] == "success":
+                        raw_patch = parse_patch(llm_res["response"])
+                        
+                        # Generate literal unified diff strings
+                        diff_text = compute_diff(f.code_snippet, raw_patch)
+                        f.patch = diff_text
+                        
+                        # Execute Semgrep rules verification on patched outputs
+                        status = validate_patch(f, raw_patch)
+                        f.patch_status = status
+                    else:
+                        f.patch_status = "failed_generation"
+                        
+            logger.info(f"[{job_id}] Patching validation loops complete")
+            
+        except Exception as e:
+             logger.error(f"[{job_id}] Patch generation failed elegantly: {e}")
+             for f in findings:
+                 if f.fusion_verdict == "true_positive" and not f.patch_status:
+                     f.patch_status = "error"
+
         # ── Step 4: Store results ─────────────────────────────────────────
         store.save_findings(job_id, findings)
         store.update_job(job_id, status="complete", finding_count=len(findings))

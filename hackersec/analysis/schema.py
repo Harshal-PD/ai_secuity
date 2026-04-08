@@ -20,8 +20,9 @@ class Finding:
     cpg_context: Optional[dict] = None
     rag_docs: Optional[list] = None
     llm_analysis: Optional[dict] = None
-    fusion_verdict: Optional[str] = None   # "true_positive"|"false_positive"|"uncertain"
+    fusion_verdict: Optional[str] = None
     patch: Optional[str] = None
+    patch_status: Optional[str] = None
 
 
 SEMGREP_SEVERITY_MAP = {

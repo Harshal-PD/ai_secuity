@@ -50,6 +50,7 @@ class FindingRecord(Base):
     llm_analysis = Column(Text, nullable=True) # JSON dict
     fusion_verdict = Column(Text, nullable=True)
     patch = Column(Text, nullable=True)
+    patch_status = Column(String(50), nullable=True)
 
 
 def init_db():
@@ -111,6 +112,9 @@ def save_findings(job_id: str, findings: list) -> None:
                 cpg_context=json.dumps(f.cpg_context) if f.cpg_context else None,
                 rag_docs=json.dumps(f.rag_docs) if f.rag_docs else None,
                 llm_analysis=json.dumps(f.llm_analysis) if getattr(f, 'llm_analysis', None) else None,
+                fusion_verdict=getattr(f, 'fusion_verdict', None),
+                patch=getattr(f, 'patch', None),
+                patch_status=getattr(f, 'patch_status', None),
             )
             db.add(record)
         db.commit()
@@ -137,6 +141,8 @@ def get_findings(job_id: str) -> list[dict]:
                 "rag_docs": json.loads(r.rag_docs) if r.rag_docs else None,
                 "llm_analysis": json.loads(r.llm_analysis) if r.llm_analysis else None,
                 "fusion_verdict": r.fusion_verdict,
+                "patch": r.patch,
+                "patch_status": getattr(r, 'patch_status', None),
             }
             for r in records
         ]
