@@ -38,8 +38,31 @@ def run_analysis(self, job_id: str, target: str, target_type: str):
         findings = dedup_findings(raw_findings)
         logger.info(f"[{job_id}] After dedup: {len(findings)} findings")
 
-        summary = summarize_findings(findings)
-        logger.info(f"[{job_id}] Summary: {summary}")
+        # ── Step 3.5: CPG Enrichment ──────────────────────────────────────
+        from hackersec.analysis.joern.client import JoernClient
+        from hackersec.analysis.joern.exceptions import JoernConnectionError, JoernQueryError
+        
+        try:
+            joern_client = JoernClient()
+            cpg_workspace = f"job_{job_id}"
+            logger.info(f"[{job_id}] Initializing CPG on workspace {cpg_workspace}")
+            
+            # Joern API convention handling
+            joern_client.create_workspace(cpg_workspace)
+            joern_client.import_code(target_path, cpg_workspace)
+            
+            for f in findings:
+                logger.info(f"[{job_id}] Taint flow query: {f.file_path}:{f.line_start}")
+                cpg_res = joern_client.query_taint(cpg_workspace, str(f.file_path), f.line_start)
+                f.cpg_context = cpg_res
+                
+            logger.info(f"[{job_id}] CPG augmentation complete")
+            
+        except (JoernConnectionError, JoernQueryError) as e:
+            logger.warning(f"[{job_id}] Joern CPG pipeline failed gracefully: {e}")
+            for f in findings:
+                if not f.cpg_context:
+                    f.cpg_context = {"cpg_status": "failed", "error": str(e)}
 
         # ── Step 4: Store results ─────────────────────────────────────────
         store.save_findings(job_id, findings)

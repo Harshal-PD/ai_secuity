@@ -1,4 +1,4 @@
-.PHONY: test lint dev worker api install
+.PHONY: test lint dev worker api install start-joern
 
 install:
 	pip install -r requirements.txt
@@ -19,3 +19,6 @@ worker:
 
 init-db:
 	python -c "from hackersec.db.store import init_db; init_db(); print('DB initialized')"
+
+start-joern:
+	joern --server --port 9000
