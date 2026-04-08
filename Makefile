@@ -1,0 +1,21 @@
+.PHONY: test lint dev worker api install
+
+install:
+	pip install -r requirements.txt
+
+test:
+	pytest tests/ -v
+
+lint:
+	ruff check hackersec/ tests/
+
+dev: api
+
+api:
+	uvicorn hackersec.main:app --reload --port 8000
+
+worker:
+	celery -A hackersec.worker.celery_app worker --loglevel=info --concurrency=2
+
+init-db:
+	python -c "from hackersec.db.store import init_db; init_db(); print('DB initialized')"
