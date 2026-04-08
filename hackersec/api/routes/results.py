@@ -29,3 +29,33 @@ def get_results(job_id: str):
         "finding_count": len(findings),
         "findings": findings,
     }
+
+
+import os
+import json
+import glob
+
+@router.get("/metrics")
+def get_metrics():
+    """Retrieve the latest evaluation metrics snapshot."""
+    eval_dir = "eval_results"
+    if not os.path.exists(eval_dir):
+        # Return empty safe defaults if benchmarking skipped
+        return {
+            "baseline_metrics": {"precision": 0, "recall": 0, "f1": 0, "fpr": 0},
+            "hackersec_metrics": {"precision": 0, "recall": 0, "f1": 0, "fpr": 0},
+            "raw_counts": {}
+        }
+        
+    jsons = glob.glob(f"{eval_dir}/*.json")
+    if not jsons:
+        return {
+            "baseline_metrics": {"precision": 0, "recall": 0, "f1": 0, "fpr": 0},
+            "hackersec_metrics": {"precision": 0, "recall": 0, "f1": 0, "fpr": 0},
+            "raw_counts": {}
+        }
+        
+    # Sort by datestring, get latest
+    latest_file = sorted(jsons)[-1]
+    with open(latest_file, "r") as f:
+         return json.load(f)
