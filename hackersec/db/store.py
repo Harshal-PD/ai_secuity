@@ -109,6 +109,7 @@ def save_findings(job_id: str, findings: list) -> None:
                 owasp_category=f.owasp_category,
                 code_snippet=f.code_snippet,
                 cpg_context=json.dumps(f.cpg_context) if f.cpg_context else None,
+                rag_docs=json.dumps(f.rag_docs) if f.rag_docs else None,
             )
             db.add(record)
         db.commit()
@@ -132,6 +133,7 @@ def get_findings(job_id: str) -> list[dict]:
                 "owasp_category": r.owasp_category,
                 "code_snippet": r.code_snippet,
                 "cpg_context": json.loads(r.cpg_context) if r.cpg_context else None,
+                "rag_docs": json.loads(r.rag_docs) if r.rag_docs else None,
                 "fusion_verdict": r.fusion_verdict,
             }
             for r in records

@@ -64,6 +64,31 @@ def run_analysis(self, job_id: str, target: str, target_type: str):
                 if not f.cpg_context:
                     f.cpg_context = {"cpg_status": "failed", "error": str(e)}
 
+        # ── Step 3.7: RAG Enrichment ──────────────────────────────────────
+        from hackersec.analysis.rag import LocalRAGStore
+        
+        try:
+            # Reusing a persistent store logic if available, else instantiate locally
+            rag = LocalRAGStore()
+            for f in findings:
+                # Compile a semantic search query based on finding's properties
+                query_str = f"Security vulnerability {f.rule_id} "
+                if f.cwe_ids:
+                    query_str += " ".join(f.cwe_ids)
+                if f.owasp_category:
+                    query_str += f" {f.owasp_category}"
+                
+                logger.info(f"[{job_id}] RAG query: {query_str}")
+                rag_results = rag.search(query_str, top_k=2)
+                f.rag_docs = rag_results
+                
+            logger.info(f"[{job_id}] RAG enrichment complete")
+        except Exception as e:
+            logger.error(f"[{job_id}] RAG augmentation failed: {e}", exc_info=True)
+            for f in findings:
+                if not f.rag_docs:
+                    f.rag_docs = []
+
         # ── Step 4: Store results ─────────────────────────────────────────
         store.save_findings(job_id, findings)
         store.update_job(job_id, status="complete", finding_count=len(findings))
