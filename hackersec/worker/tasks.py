@@ -119,6 +119,30 @@ def run_analysis(self, job_id: str, target: str, target_type: str):
                 if not getattr(f, 'llm_analysis', None):
                     f.llm_analysis = {"llm_status": "failed_connection", "error": str(e)}
 
+        # ── Step 3.9: ML Fusion Inference ─────────────────────────────────
+        from hackersec.analysis.ml.inference import FusionClassifier
+        
+        try:
+            # Reusing local cache object initialized for matrix isolation
+            classifier = FusionClassifier()
+            for f in findings:
+                res = classifier.predict(f)
+                # Map verdict output dynamically to DB persistence bounds
+                # SHAP components get strictly mapped safely stringified via json dumps
+                f.fusion_verdict = res["prediction"]
+                # We could append SHAP to fusion_verdict implicitly as string 
+                # To maintain database integrity without adding another schema column:
+                if res.get("shap_values"):
+                    f.llm_analysis["shap_values"] = res["shap_values"]
+                    
+            logger.info(f"[{job_id}] ML Classifier fusion completion")
+            
+        except Exception as e:
+            logger.error(f"[{job_id}] ML Inference crashed gracefully: {e}")
+            for f in findings:
+                 if not f.fusion_verdict:
+                     f.fusion_verdict = "uncertain"
+
         # ── Step 4: Store results ─────────────────────────────────────────
         store.save_findings(job_id, findings)
         store.update_job(job_id, status="complete", finding_count=len(findings))

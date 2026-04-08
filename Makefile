@@ -25,3 +25,6 @@ start-joern:
 
 seed-kb:
 	python hackersec/ingestion/seed_kb.py
+
+train:
+	python hackersec/analysis/ml/train.py
