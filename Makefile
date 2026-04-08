@@ -28,3 +28,6 @@ seed-kb:
 
 train:
 	python hackersec/analysis/ml/train.py
+
+eval:
+	python eval_run.py
