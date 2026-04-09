@@ -54,6 +54,12 @@ Accurate, context-aware vulnerability detection with actionable remediation — 
 - **Performance**: Joern CPG generation is heavyweight — async processing queue required for large repos
 - **Timeline**: Semester 6 deadline — 8 phases, prioritize core pipeline over polish
 
+## Current State
+**v1.0 Deployed (2026-04-09)**: The full pipeline (Ingestion ➔ Joern CPG ➔ FAISS/OWASP ➔ DeepSeek LLM ➔ ML Fusion ➔ Auto-Patching) operates natively mapped cleanly against evaluation metrics bridging into the React/Vite UI.
+
+## Next Milestone Goals
+1. Optimization & Scale (Larger AST representations).
+2. Distributed Architectures for Ollama execution clusters.
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
