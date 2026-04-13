@@ -1,0 +1,37 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environment
+.env
+.env.local
+
+# Database
+*.db
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (hackersec-web has its own .gitignore too)
+node_modules/
+
+# Workspace / uploads
+workspace/
+data/uploads/
+
+# Logs
+*.log
+
+# Planning (optional: remove if you want to track planning artifacts)
+# .planning/
