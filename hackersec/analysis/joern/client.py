@@ -1,4 +1,5 @@
 import logging
+import os
 from pathlib import Path
 import httpx
 
@@ -6,9 +7,11 @@ from hackersec.analysis.joern.exceptions import JoernConnectionError, JoernQuery
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_JOERN_URL = os.getenv("JOERN_BASE_URL", "http://localhost:9000")
+
 
 class JoernClient:
-    def __init__(self, base_url: str = "http://localhost:9000"):
+    def __init__(self, base_url: str = _DEFAULT_JOERN_URL):
         self.base_url = base_url.rstrip("/")
         # Joern endpoints often take significant processing time
         self.client = httpx.Client(timeout=300.0)

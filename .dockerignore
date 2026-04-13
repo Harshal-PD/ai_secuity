@@ -1,0 +1,14 @@
+venv/
+__pycache__/
+*.pyc
+.git/
+.planning/
+.agent/
+hackersec-web/node_modules/
+hackersec-web/dist/
+*.db
+workspace/
+data/uploads/
+.env
+.env.local
+*.log

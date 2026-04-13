@@ -1,0 +1,122 @@
+services:
+  # ── Redis (Message Broker + Result Backend) ────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ── Ollama (Local LLM Runtime with GPU) ────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:11434/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ── Ollama Model Puller (one-shot init container) ──────────────────────
+  ollama-pull:
+    image: curlimages/curl:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: >
+      sh -c "
+        echo 'Pulling deepseek-coder-v2 model...' &&
+        curl -s http://ollama:11434/api/pull -d '{\"name\": \"deepseek-coder-v2\"}' &&
+        echo 'Model pull complete!'
+      "
+
+  # ── Joern CPG Server ───────────────────────────────────────────────────
+  joern:
+    image: ghcr.io/joernio/joern:latest
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    command: ["joern", "--server"]
+    volumes:
+      - joern_data:/tmp/joern
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  # ── FastAPI Backend ────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env.docker
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - app_workspace:/app/workspace
+      - app_data:/app/data
+    command: ["uvicorn", "hackersec.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  # ── Celery Worker (same image, different command) ──────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - app_workspace:/app/workspace
+      - app_data:/app/data
+    command: >
+      celery -A hackersec.worker.celery_app worker
+      --loglevel=info
+      --pool=solo
+      --concurrency=2
+
+  # ── React Frontend (nginx) ────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./hackersec-web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  redis_data:
+  ollama_data:
+  joern_data:
+  app_workspace:
+  app_data:

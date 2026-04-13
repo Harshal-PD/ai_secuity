@@ -1,10 +1,13 @@
 import logging
+import os
 import httpx
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
 class OllamaClient:
-    def __init__(self, base_url: str = "http://localhost:11434"):
+    def __init__(self, base_url: str = _DEFAULT_OLLAMA_URL):
         self.base_url = base_url.rstrip("/")
         # Provide aggressive timeouts to prevent blocking inference loops mapping large batches
         self.client = httpx.Client(timeout=60.0)

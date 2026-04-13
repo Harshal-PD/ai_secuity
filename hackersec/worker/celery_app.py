@@ -8,6 +8,7 @@ celery_app = Celery(
     "hackersec",
     broker=BROKER_URL,
     backend=BACKEND_URL,
+    include=["hackersec.worker.tasks"]
 )
 
 celery_app.conf.update(
@@ -18,4 +19,5 @@ celery_app.conf.update(
     task_time_limit=300,
     worker_prefetch_multiplier=1,
     worker_concurrency=2,
+    broker_connection_retry_on_startup=True,
 )
