@@ -51,15 +51,17 @@ services:
 
   # ── Joern CPG Server ───────────────────────────────────────────────────
   joern:
-    image: ghcr.io/joernio/joern:latest
+    image: ghcr.io/joernio/joern:nightly
     restart: unless-stopped
     ports:
-      - "9000:9000"
+      - "8080:8080"
     command: ["joern", "--server"]
     volumes:
       - joern_data:/tmp/joern
+      - app_workspace:/app/workspace
+    working_dir: /app
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9000/ || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/ || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10
