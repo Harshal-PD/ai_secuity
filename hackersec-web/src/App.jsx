@@ -3,7 +3,7 @@ import { UploadCloud, Shield, ShieldCheck, CheckCircle, AlertTriangle, XCircle, 
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts'
 import './index.css'
 
-const API_BASE = "http://localhost:8000/api"
+const API_BASE = "/api"
 
 const SEVERITY_COLORS = {
   critical: '#ef4444',
