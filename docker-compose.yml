@@ -80,6 +80,7 @@ services:
     volumes:
       - app_workspace:/app/workspace
       - app_data:/app/data
+      - db_data:/app/db_data
     command: ["uvicorn", "hackersec.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
   # ── Celery Worker (same image, different command) ──────────────────────
@@ -96,6 +97,7 @@ services:
     volumes:
       - app_workspace:/app/workspace
       - app_data:/app/data
+      - db_data:/app/db_data
     command: >
       celery -A hackersec.worker.celery_app worker
       --loglevel=info
@@ -119,3 +121,4 @@ volumes:
   joern_data:
   app_workspace:
   app_data:
+  db_data:

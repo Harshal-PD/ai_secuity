@@ -1,5 +1,5 @@
 import uuid
-import tempfile
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
@@ -9,6 +9,10 @@ from hackersec.db import store
 from hackersec.worker.tasks import run_analysis
 
 router = APIRouter(prefix="/api", tags=["analysis"])
+
+# Use a shared directory for uploads (mounted as Docker volume)
+UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "data/uploads"))
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class AnalyzeRequest(BaseModel):
@@ -22,9 +26,10 @@ async def upload_file(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="No file provided")
 
     job_id = str(uuid.uuid4())
-    # Save uploaded file to temp location
-    tmpdir = Path(tempfile.mkdtemp())
-    dest = tmpdir / file.filename
+    # Save uploaded file to shared upload directory
+    job_dir = UPLOAD_DIR / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+    dest = job_dir / file.filename
     content = await file.read()
     dest.write_bytes(content)
 
