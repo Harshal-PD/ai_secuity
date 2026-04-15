@@ -1,4 +1,5 @@
 import json
+import logging
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -9,6 +10,7 @@ from hackersec.analysis.schema import (
     BANDIT_SEVERITY_MAP,
 )
 
+logger = logging.getLogger(__name__)
 
 # ─── Semgrep ────────────────────────────────────────────────────────────────
 
@@ -21,10 +23,12 @@ SEMGREP_CONFIGS = [
 
 def run_semgrep(target_path: Path, job_id: str) -> list[Finding]:
     """Run Semgrep with security rule sets. Returns normalized Finding list."""
-    cmd = ["semgrep", "--json", "--timeout", "60"]
+    cmd = ["semgrep", "scan", "--json", "--timeout", "60", "--metrics=off"]
     for cfg in SEMGREP_CONFIGS:
         cmd += ["--config", cfg]
     cmd.append(str(target_path))
+
+    logger.info(f"[{job_id}] Running Semgrep: {' '.join(cmd)}")
 
     try:
         result = subprocess.run(
@@ -35,18 +39,22 @@ def run_semgrep(target_path: Path, job_id: str) -> list[Finding]:
             errors="replace",
         )
     except subprocess.TimeoutExpired:
+        logger.warning(f"[{job_id}] Semgrep timed out after 120s")
         return []
     except FileNotFoundError:
-        raise RuntimeError("semgrep not found — install it: pip install semgrep")
+        logger.error(f"[{job_id}] Semgrep binary not found in container")
+        return []
 
     # Exit code 0 = no findings, 1 = findings found, 2+ = error
     if result.returncode >= 2:
-        # Log but don't crash the pipeline
+        logger.error(f"[{job_id}] Semgrep exited with code {result.returncode}")
+        logger.error(f"[{job_id}] Semgrep stderr: {result.stderr[:500]}")
         return []
 
     try:
         data = json.loads(result.stdout)
     except json.JSONDecodeError:
+        logger.error(f"[{job_id}] Semgrep produced invalid JSON. stdout[:200]: {result.stdout[:200]}")
         return []
 
     findings = []
@@ -88,6 +96,7 @@ def run_bandit(target_path: Path, job_id: str) -> list[Finding]:
     """Run Bandit on Python files. Returns normalized Finding list."""
     # Bandit only works on Python — skip non-Python targets
     if target_path.is_file() and not str(target_path).endswith(".py"):
+        logger.info(f"[{job_id}] Skipping Bandit (not a .py file)")
         return []
 
     cmd = [
@@ -95,6 +104,8 @@ def run_bandit(target_path: Path, job_id: str) -> list[Finding]:
         str(target_path), "-f", "json", "-ll",  # -ll = medium + high only
     ]
     cmd = [c for c in cmd if c]  # Remove empty strings
+
+    logger.info(f"[{job_id}] Running Bandit: {' '.join(cmd)}")
 
     try:
         result = subprocess.run(
@@ -105,13 +116,18 @@ def run_bandit(target_path: Path, job_id: str) -> list[Finding]:
             errors="replace",
         )
     except subprocess.TimeoutExpired:
+        logger.warning(f"[{job_id}] Bandit timed out after 60s")
         return []
     except FileNotFoundError:
-        raise RuntimeError("bandit not found — install it: pip install bandit")
+        logger.error(f"[{job_id}] Bandit binary not found in container")
+        return []
+
+    logger.info(f"[{job_id}] Bandit exit code: {result.returncode}")
 
     try:
         data = json.loads(result.stdout)
     except json.JSONDecodeError:
+        logger.error(f"[{job_id}] Bandit produced invalid JSON. stderr: {result.stderr[:200]}")
         return []
 
     findings = []
@@ -136,6 +152,7 @@ def run_bandit(target_path: Path, job_id: str) -> list[Finding]:
             cwe_ids=cwe_ids,
         ))
 
+    logger.info(f"[{job_id}] Bandit found {len(findings)} findings")
     return findings
 
 
@@ -144,6 +161,15 @@ def run_bandit(target_path: Path, job_id: str) -> list[Finding]:
 def run_static_analysis(target_path: Path, job_id: str = "standalone") -> list[Finding]:
     """Run all static analysis tools and return combined findings."""
     findings: list[Finding] = []
-    findings.extend(run_semgrep(target_path, job_id))
-    findings.extend(run_bandit(target_path, job_id))
+
+    semgrep_findings = run_semgrep(target_path, job_id)
+    logger.info(f"[{job_id}] Semgrep: {len(semgrep_findings)} findings")
+    findings.extend(semgrep_findings)
+
+    bandit_findings = run_bandit(target_path, job_id)
+    logger.info(f"[{job_id}] Bandit: {len(bandit_findings)} findings")
+    findings.extend(bandit_findings)
+
+    logger.info(f"[{job_id}] Total static analysis: {len(findings)} findings")
     return findings
+
