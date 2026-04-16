@@ -20,7 +20,7 @@ class OllamaClient:
         except httpx.RequestError:
             return False
 
-    def generate(self, prompt: str, model: str = "deepseek-coder-v2") -> dict:
+    def generate(self, prompt: str, model: str = "codellama") -> dict:
         """
         Invokes Ollama text generation endpoint sequentially.
         DeepSeek variants usually yield strict boundaries via format constraints.

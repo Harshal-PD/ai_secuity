@@ -41,8 +41,8 @@ services:
     restart: "no"
     entrypoint: >
       sh -c "
-        echo 'Pulling deepseek-coder-v2 model...' &&
-        curl -s http://ollama:11434/api/pull -d '{\"name\": \"deepseek-coder-v2\"}' &&
+        echo 'Pulling codellama model...' &&
+        curl -s http://ollama:11434/api/pull -d '{\"name\": \"codellama\"}' &&
         echo 'Model pull complete!'
       "
 
