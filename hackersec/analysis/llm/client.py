@@ -39,6 +39,9 @@ class OllamaClient:
             data = res.json()
             return {"llm_status": "success", "response": data.get("response", "")}
             
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Ollama backend returned status {e.response.status_code}: {e.response.text}")
+            return {"llm_status": "failed_connection", "error": f"HTTP {e.response.status_code}: {e.response.text[:200]}"}
         except httpx.RequestError as e:
             logger.error(f"Failed to query Ollama backend: {e}")
             return {"llm_status": "failed_connection", "error": str(e)}
