@@ -18,6 +18,7 @@ SEMGREP_CONFIGS = [
     "p/security-audit",
     "p/owasp-top-ten",
     "p/python",
+    "p/secrets",
 ]
 
 
@@ -101,7 +102,7 @@ def run_bandit(target_path: Path, job_id: str) -> list[Finding]:
 
     cmd = [
         "bandit", "-r" if target_path.is_dir() else "",
-        str(target_path), "-f", "json", "-ll",  # -ll = medium + high only
+        str(target_path), "-f", "json", "-l",  # -l = low + medium + high
     ]
     cmd = [c for c in cmd if c]  # Remove empty strings
 
