@@ -23,14 +23,14 @@ services:
       - ollama_data:/root/.ollama
     runtime: nvidia
     environment:
-      - NVIDIA_VISIBLE_DEVICES=7
+      - NVIDIA_VISIBLE_DEVICES=${HACKERSEC_GPU_ID:-all}
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['7']
+              device_ids: ['${HACKERSEC_GPU_ID:-all}']
               capabilities: [gpu]
     healthcheck:
       test: ["CMD-SHELL", "ollama list || exit 1"]

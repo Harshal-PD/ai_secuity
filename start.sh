@@ -1,72 +1,23 @@
 #!/bin/bash
-# ──────────────────────────────────────────────────────────────────────────
-# HackerSec DGX Startup Script
-# Usage: ssh into DGX, clone repo, run this script
-# ──────────────────────────────────────────────────────────────────────────
+# HackerSec Auto-GPU Selector
+# This script interrogates the DGX Host's NVIDIA-SMI to find the GPU with the most free VRAM,
+# dynamically injects the ID into the Docker Compose context, and then launches the cluster.
 
-set -e
+echo "🔍 Scanning DGX Host for the optimal GPU..."
 
-echo "╔══════════════════════════════════════════════════════════╗"
-echo "║       HackerSec — AI Security Code Reviewer             ║"
-echo "║       Starting all services on DGX...                   ║"
-echo "╚══════════════════════════════════════════════════════════╝"
+# Execute nvidia-smi, format the output to memory.free and index,
+# sort numerically descending, grab the top line, and extract specifically the index ID.
+BEST_GPU=$(nvidia-smi --query-gpu=memory.free,index --format=csv,noheader,nounits | sort -nr | head -n 1 | awk -F', ' '{print $2}')
 
-# Check prerequisites
-if ! command -v docker &> /dev/null; then
-    echo "❌ Docker not found. Install Docker first."
-    exit 1
-fi
+echo "✅ Auto-detected GPU $BEST_GPU as having the most free VRAM!"
+echo "🚀 Booting HackerSec Docker cluster bound to GPU $BEST_GPU..."
 
-if ! docker compose version &> /dev/null; then
-    echo "❌ Docker Compose not found. Install Docker Compose plugin."
-    exit 1
-fi
+# Export for docker compose to intercept
+export HACKERSEC_GPU_ID=$BEST_GPU
 
-# Check NVIDIA runtime (optional but recommended on DGX)
-if command -v nvidia-smi &> /dev/null; then
-    echo "✅ NVIDIA GPU detected:"
-    nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
-    echo ""
-else
-    echo "⚠️  No NVIDIA GPU detected. Ollama will run on CPU (slower)."
-    echo "   If on DGX, ensure nvidia-container-toolkit is installed."
-    echo ""
-fi
-
-# Create .env.docker if missing
-if [ ! -f .env.docker ]; then
-    echo "⚠️  .env.docker not found, using defaults..."
-fi
-
-# Build and start all services
-echo "🔨 Building containers..."
-docker compose build
-
-echo "🚀 Starting all services..."
+# Rebuild if requested, otherwise bring up asynchronously
+docker compose build --no-cache backend worker
 docker compose up -d
 
 echo ""
-echo "⏳ Waiting for services to become healthy..."
-sleep 10
-
-# Show status
-echo ""
-docker compose ps
-
-echo ""
-echo "╔══════════════════════════════════════════════════════════╗"
-echo "║  Services:                                              ║"
-echo "║    Frontend:  http://$(hostname -I | awk '{print $1}'):3000       ║"
-echo "║    API:       http://$(hostname -I | awk '{print $1}'):8000       ║"
-echo "║    API Docs:  http://$(hostname -I | awk '{print $1}'):8000/docs  ║"
-echo "╚══════════════════════════════════════════════════════════╝"
-echo ""
-echo "📋 Useful commands:"
-echo "   docker compose logs -f          # Follow all logs"
-echo "   docker compose logs -f worker   # Follow worker logs only"
-echo "   docker compose ps               # Check service status"
-echo "   docker compose down             # Stop everything"
-echo "   docker compose down -v          # Stop + remove volumes"
-echo ""
-echo "🔍 Ollama model pull may take a few minutes on first run."
-echo "   Check progress: docker compose logs -f ollama-pull"
+echo "HackerSec is online. Ollama is isolated to GPU $BEST_GPU."
