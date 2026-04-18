@@ -29,7 +29,10 @@ class OllamaClient:
             "model": model,
             "prompt": prompt,
             "stream": False,
-            "format": "json"
+            "format": "json",
+            "options": {
+                "num_ctx": 4096
+            }
         }
         try:
             res = self.client.post(f"{self.base_url}/api/generate", json=payload)
