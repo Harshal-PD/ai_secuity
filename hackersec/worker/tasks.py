@@ -28,6 +28,14 @@ def run_analysis(self, job_id: str, target: str, target_type: str):
             target_path = Path(target)
             if not target_path.exists():
                 raise FileNotFoundError(f"Uploaded file not found: {target}")
+                
+            if target_path.name.endswith(".zip"):
+                import zipfile
+                logger.info(f"[{job_id}] Extracting zip archive: {target_path.name}")
+                extract_dir = tmpdir / "repo"
+                with zipfile.ZipFile(target_path, 'r') as zip_ref:
+                    zip_ref.extractall(extract_dir)
+                target_path = extract_dir
 
         # ── Step 2: Static analysis ───────────────────────────────────────
         logger.info(f"[{job_id}] Running static analysis on {target_path}")

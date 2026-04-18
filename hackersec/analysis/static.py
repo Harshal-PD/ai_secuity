@@ -12,6 +12,24 @@ from hackersec.analysis.schema import (
 
 logger = logging.getLogger(__name__)
 
+def _extract_snippet(file_path: str, start_line: int, end_line: int, context_lines: int = 3) -> str | None:
+    """Reads the physical file to extract the vulnerable block with context."""
+    path = Path(file_path)
+    if not path.is_file():
+        return None
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+        
+        start_idx = max(0, start_line - 1 - context_lines)
+        end_idx = min(len(lines), end_line + context_lines)
+        
+        snippet = "".join(lines[start_idx:end_idx])
+        return snippet.strip()
+    except Exception as e:
+        logger.warning(f"Failed to extract snippet from {file_path}: {e}")
+        return None
+
 # ─── Semgrep ────────────────────────────────────────────────────────────────
 
 SEMGREP_CONFIGS = [
@@ -75,6 +93,8 @@ def run_semgrep(target_path: Path, job_id: str) -> list[Finding]:
         if isinstance(owasp, list):
             owasp = owasp[0] if owasp else None
 
+        snippet = _extract_snippet(r["path"], r["start"]["line"], r["end"]["line"])
+
         findings.append(Finding(
             job_id=job_id,
             file_path=r["path"],
@@ -86,6 +106,7 @@ def run_semgrep(target_path: Path, job_id: str) -> list[Finding]:
             message=r["extra"]["message"],
             cwe_ids=cwe_ids,
             owasp_category=owasp,
+            code_snippet=snippet,
         ))
 
     return findings
@@ -141,16 +162,21 @@ def run_bandit(target_path: Path, job_id: str) -> list[Finding]:
         cwe_id = cwe_info.get("id")
         cwe_ids = [f"CWE-{cwe_id}"] if cwe_id else []
 
+        start_line = r["line_number"]
+        end_line = r.get("line_range", [r["line_number"]])[-1]
+        snippet = _extract_snippet(r["filename"], start_line, end_line)
+
         findings.append(Finding(
             job_id=job_id,
             file_path=r["filename"],
-            line_start=r["line_number"],
-            line_end=r.get("line_range", [r["line_number"]])[-1],
+            line_start=start_line,
+            line_end=end_line,
             rule_id=r["test_id"],
             tool="bandit",
             severity=severity,
             message=r["issue_text"],
             cwe_ids=cwe_ids,
+            code_snippet=snippet,
         ))
 
     logger.info(f"[{job_id}] Bandit found {len(findings)} findings")
