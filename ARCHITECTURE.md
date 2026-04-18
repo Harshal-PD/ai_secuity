@@ -1,68 +1,75 @@
-# HackerSec Architecture & Data Flow
+# HackerSec Analytical Architecture & Pipeline
 
-This document outlines the detailed architecture and end-to-end data flow of the HackerSec AI-Driven Security Code Reviewer. It is designed to document how the different microservices interact within the isolated DGX server environment.
+This document details the deep conceptual architecture of HackerSec's analytical pipeline. It explains exactly what inputs and outputs are passed between the analytical engines (Static Analysis, CPG, RAG, LLM, and ML Fusion) and the technical philosophy behind *why* they are structured this way.
 
----
-
-## 🏗️ 1. High-Level System Architecture
-
-HackerSec relies on a multi-container Docker infrastructure to asynchronously process and evaluate massive codebases using Machine Learning and Static Analysis, without relying on external network calls for inference or vector searching.
-
-### Microservices Setup (`docker-compose.yml`)
-- **Frontend (Nginx/React)**: Serves the Web UI on Port 3000. Proxies all `/api` requests internally to the Backend across the secure Docker bridge.
-- **Backend (FastAPI)**: Hands out jobs, monitors status, and serves the dashboard REST endpoints.
-- **Message Broker (Redis)**: Manages the asynchronous task queues (Celery) and temporarily stores execution results.
-- **Celery Worker**: The heavyweight processor. It coordinates the static analysis engines, orchestrates the FAISS vector searches, queries Joern, and communicates with the LLM. 
-- **Joern CPG Server**: A JVM-based Server exposing Port 8080. It maps the Abstract Syntax Tree (AST), Control Flow (CFG), and Data Dependencies of the source code.
-- **Ollama (LLM Engine)**: GPU-isolated runtime running Meta's `codellama` (7B parameters). Explicitly bound to **GPU 7** (via Compose deploy specs) to avoid out-of-memory kernel panics caused by adjacent DGX cluster jobs.
+## 🎯 The Philosophy: Grounded AI Security
+Modern LLMs are prone to extreme hallucination when asked to "find security bugs" in large codebases. HackerSec solves this by using **Deterministic Static Analysis** to generate hard evidence (triggers), **Code Property Graphs (CPG)** to map the data flow, and **RAG** to establish definitions. The LLM is then used exclusively for *binary reasoning* rather than blind discovery.
 
 ---
 
-## 🌊 2. End-to-End Pipeline Data Flow
+## 🔍 Phase 1: Static Analysis (The "Trigger" Generation)
+Rather than feeding thousands of lines of arbitrary code to the LLM, we use AST (Abstract Syntax Tree) parsers to find mathematically definitive "Points of Interest."
 
-When a user submits a file (e.g., `test_vuln.py`) for evaluation through the Web UI, the pipeline follows a strict, sequential 5-phase analytical process:
-
-### Phase 1: Ingestion & Queuing
-1. The file is POSTed to the **FastAPI Backend**.
-2. The Backend physically saves the file to the active Docker Volume (`app_data/uploads/<uuid>/`).
-3. The Backend creates a Celery Task identifying the file path and hands it to **Redis**.
-4. The **Celery Worker** pulls the task from Redis and begins processing.
-
-### Phase 2: Static Analysis (The "Trigger" Layer)
-Instead of forcing the LLM to blindly search thousands of lines of code, HackerSec uses traditional SBR (Signature-Based Rulers) to find "Points of Interest":
-1. **Semgrep**: Scans the file using `p/secrets`, `p/owasp-top-ten`, and `p/python` rules.
-2. **Bandit**: Secondary Python-specific AST scanner testing for misconfigurations.
-*Result*: A deduplicated list of potential vulnerabilities (e.g., "Found os.system() use at Line 42").
-
-### Phase 3: CPG Taint Extraction (The "Trace" Layer)
-To determine if a "Point of Interest" is actually exploitable, the LLM needs to know where the data originated.
-1. The Worker sends a POST request to the **Joern Server**.
-2. Joern constructs a **Code Property Graph (CPG)** for the entire file.
-3. Joern tracks the vulnerable variable backward in time across functions to see if it touches a user-controlled source (like an HTTP Request).
-*Result*: A trace path (e.g., `Line 12 -> Line 40 -> Line 42`).
-
-### Phase 4: RAG Knowledge Base (The "Context" Layer)
-Because CodeLlama is an LLM, its inherent knowledge about specific vulnerabilities can drift. We ground its reasoning against formal MITRE databases.
-1. The error string (e.g., "Improper Neutralization of OS Commands") is encoded into a 384-dimensional mathematical vector using the lightweight CPU model `all-MiniLM-L6-v2`.
-2. This vector is compared against thousands of CWE definitions residing in the **FAISS Vector Database** (`kb.faiss`).
-3. FAISS instantly returns the `top_k = 2` paragraphs physically describing the exact weakness methodology.
-
-### Phase 5: LLM Reasoning (The "Decision" Layer)
-The Worker merges all the gathered intelligence into a colossal prompt and queries **Ollama**.
-
-**Prompt Ingredients transmitted to CodeLlama:**
-- The Exact Source Code (so it can inspect manual developer sanitization)
-- The Static Rule Name (e.g., `eval-injection`)
-- The Joern CPG Taint Track (Path data travels)
-- The MITRE RAG Definition (Mathematical context)
-
-CodeLlama runs this through its internal layers loaded on the isolated Tesla V100 GPU (GPU 7). It analyzes the context and is strictly constrained by a JSON output schema. It returns a final verdict (`True Positive` or `False Positive`), overriding the naive Static Analysis tools.
+- **Input:** Raw Source Code (e.g., `test_vuln.py`).
+- **Concept:** We use `Semgrep` (equipped with `p/owasp-top-ten` and `p/secrets` rules) and `Bandit`. These engines tokenize the code and execute regex and graph-based rule matching to find traditionally dangerous function calls (like `eval()` or `os.system()`).
+- **Output:** A deduplicated list of **Raw Findings**.
+  ```json
+  {
+    "line_number": 42,
+    "rule_id": "eval-injection",
+    "cwe_id": "CWE-95",
+    "code_snippet": "eval(request.GET['data'])"
+  }
+  ```
 
 ---
 
-## ⚙️ 3. Hardware Constraint Handling
+## 🕸️ Phase 2: Code Property Graph (CPG) Augmentation
+Static analysis tells us *where* a dangerous function is used, but it does not know if the input is sanitized elsewhere in the file. We use Joern to trace the data backward.
 
-Running Large Language Models on a shared DGX Server (where multiple researchers are saturating CUDA cores) is notoriously difficult. HackerSec circumvents timeouts:
+- **Input:** The offending Line Number (from Phase 1) + Source File.
+- **Concept:** Joern parses the file into a multi-dimensional graph combining the AST, the CFG (Control Flow Graph), and the PDG (Program Dependence Graph). We inject Scala query scripts into Joern that execute **Taint Flow Analysis**. This mathematically traces how a variable flows from its declaration (the source) to its execution (the sink).
+- **Output:** A String representation of the data's journey (Taint Path).
+  ```text
+  Line 10: user_input = request.GET['data']
+  Line 25: sanitized = strip_tags(user_input)
+  Line 42: eval(sanitized)
+  ```
 
-- **Tensor Splitting**: A `16384` context-window requires ~8.2 GB of VRAM. If GPU 7 falls beneath 11 GB of total free threshold (due to other scripts), Ollama intentionally "splits" the AI across `libggml-cuda.so` and `libggml-cpu-haswell.so` (the PCIe/CPU). Performance slows to ~40 seconds per file, but effectively prevents fatal CUDA `OOM (Out Of Memory)` exceptions.
-- **httpx Impatience Bounding**: The internal python LLM Client (`client.py`) sets a highly aggressive `timeout=300.0s`. Standard python routines crash at 60s, but HackerSec allows deep, un-terminated context reasoning windows due to the potential hybrid PCIe penalty.
+---
+
+## 📚 Phase 3: RAG Grounding (The Knowledge Retrieval)
+Because the internal knowledge weights of models like CodeLlama deteriorate or confuse specific CVEs/CWEs, we ground the LLM with physical definitions before it thinks.
+
+- **Input:** The Static rule string (e.g., `CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code`).
+- **Concept:** We process the rule string through the `all-MiniLM-L6-v2` transformer model to convert it into a dense 384-dimensional mathematical vector. We perform an **L2 Distance Similarity Search** against our offline FAISS database (which physically holds over 1,000 MITRE dictionary vulnerabilities).
+- **Output:** The Top 2 most mathematically relevant paragraphs detailing how the attack actually works, what mitigations exist, and theoretical exploitation vectors.
+
+---
+
+## 🧠 Phase 4: LLM Evaluation (The Reasoning Engine)
+We merge all gathered intelligence and force the LLM to act as a **Senior Security Reviewer** making a logical decision.
+
+- **Input:** A highly structured mega-prompt injected with:
+  1. Full Source Code
+  2. The flagged Line segment
+  3. The CPG Taint Flow Array
+  4. The 2 MITRE RAG Paragraphs
+- **Concept:** The CodeLlama 7B model (running entirely in VRAM) processes the prompt. Because it is given the CPG, it can read: *"Ah, I see `eval` is used on Line 42, but the CPG shows the data was explicitly cast to an integer on Line 25."* Because it is given the RAG, it knows: *"CWE-95 explicitly states that integer-casted variables cannot be leveraged for arbitrary execution."*
+- **Output:** A rigid, deterministic JSON object overriding the naive static analysis.
+  ```json
+  {
+    "reasoning": "The tainted variable is sanitized via int() casting prior to the eval() sink, neutralizing the CWE-95 threat.",
+    "is_true_positive": false,
+    "confidence_score": 0.95
+  }
+  ```
+
+---
+
+## 🧬 Phase 5: ML Fusion (The Confidence Classifier)
+*Research Roadmap Phase: To be finalized for HuggingFace Dataset Benchmarking.*
+
+- **Input:** The LLM's Boolean output (`is_true_positive`), The LLM's raw Confidence Score, and the Static Analyzer's original Severity Rating (Low/Medium/High).
+- **Concept:** LLMs occasionally output uncertain probabilities. We map these results into numerical feature vectors. A lightweight Machine Learning classifier (like Scikit-Learn's `RandomForest` or `GradientBoostingClassifier`) evaluates these combined features against historically trained data distributions to calculate a final mathematical probability.
+- **Output:** A final, normalized metric (0.0 to 1.0 probability) representing the ultimate reality of the vulnerability, establishing the final `Precision`, `Recall`, and `F1 Score` of the HackerSec research pipeline.
