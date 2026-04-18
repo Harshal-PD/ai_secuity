@@ -10,7 +10,7 @@ class OllamaClient:
     def __init__(self, base_url: str = _DEFAULT_OLLAMA_URL):
         self.base_url = base_url.rstrip("/")
         # Provide aggressive timeouts to prevent blocking inference loops mapping large batches
-        self.client = httpx.Client(timeout=60.0)
+        self.client = httpx.Client(timeout=300.0)
 
     def ping(self) -> bool:
         """Check if local Ollama Server is reachable."""
