@@ -23,6 +23,10 @@ class Finding:
     fusion_verdict: Optional[str] = None
     patch: Optional[str] = None
     patch_status: Optional[str] = None
+    # Dynamic exploit verification (verify/): True=reproduced, False=not triggered,
+    # None=not dynamically checkable (no oracle / no driver / sandbox unavailable).
+    reproduced: Optional[bool] = None
+    repro_evidence: Optional[dict] = None
 
 
 SEMGREP_SEVERITY_MAP = {

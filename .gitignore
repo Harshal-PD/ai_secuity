@@ -30,6 +30,10 @@ node_modules/
 workspace/
 data/uploads/
 
+# Generated eval artifacts
+eval_results/
+data/eval_set/
+
 # Logs
 *.log
 

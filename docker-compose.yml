@@ -105,6 +105,10 @@ services:
       - app_data:/app/data
       - db_data:/app/db_data
       - huggingface_cache:/root/.cache/huggingface
+      # Docker-out-of-docker: lets the exploit-verification sandbox
+      # (hackersec/analysis/verify/sandbox.py) spawn hardened containers on the
+      # host daemon. Requires the docker CLI in the worker image (see Dockerfile).
+      - /var/run/docker.sock:/var/run/docker.sock
     command: >
       celery -A hackersec.worker.celery_app worker
       --loglevel=info

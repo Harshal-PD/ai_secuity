@@ -73,3 +73,15 @@ We merge all gathered intelligence and force the LLM to act as a **Senior Securi
 - **Input:** The LLM's Boolean output (`is_true_positive`), The LLM's raw Confidence Score, and the Static Analyzer's original Severity Rating (Low/Medium/High).
 - **Concept:** LLMs occasionally output uncertain probabilities. We map these results into numerical feature vectors. A lightweight Machine Learning classifier (like Scikit-Learn's `RandomForest` or `GradientBoostingClassifier`) evaluates these combined features against historically trained data distributions to calculate a final mathematical probability.
 - **Output:** A final, normalized metric (0.0 to 1.0 probability) representing the ultimate reality of the vulnerability, establishing the final `Precision`, `Recall`, and `F1 Score` of the HackerSec research pipeline.
+
+---
+
+## 🧪 Phase 6: Dynamic Exploit Verification (The Proof Engine)
+Every stage above *reasons* about the code; none *proves* the bug is real. This stage does. It reproduces the exploit by executing the real flagged code against a malicious payload inside a hardened sandbox — the differentiator over every SAST-only tool ("we don't just flag it, we prove it fires").
+
+- **Input:** A candidate `Finding` whose fusion verdict is `true_positive` or `uncertain`, in a dynamically-checkable CWE class (injection / RCE: CWE-78/77/94/95).
+- **Concept:** `hackersec/analysis/verify/` builds a per-CWE probe (`oracles.py`) — a driver that imports the real target function and calls it with a payload crafted to print a unique sentinel marker *iff* the sink executes it. The driver runs in an ephemeral, network-less, non-root, read-only, cap-dropped Docker container (`sandbox.py`). If the code sanitizes the input, the marker never appears.
+- **Output:** `finding.reproduced` = `True` (marker observed → confirmed exploitable), `False` (not triggered → likely false positive), or `None` (no oracle / no driver / sandbox unavailable — honest "not checkable", never a false negative), plus `repro_evidence`.
+- **Research value:** the evaluation harness adds a `hackersec_verified` column (predict positive only if `reproduced is True`), quantifying how much the reproduction gate raises precision over fusion alone.
+
+> **Note on the pipeline seam:** Phases 2–6 are orchestrated by the single `analyze_findings()` in `hackersec/analysis/pipeline.py`, called by BOTH the Celery worker and the evaluation runner. This guarantees the benchmark measures the same code that runs in production — the eval no longer mocks the LLM/CPG.

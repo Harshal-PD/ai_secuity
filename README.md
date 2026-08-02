@@ -75,6 +75,14 @@ make lint       # Run linter
 make dev        # Start all services (requires Redis)
 ```
 
+## Documentation
+
+New here? Start with **[`docs/OVERVIEW.md`](docs/OVERVIEW.md)** — a full deep-dive (what it does, how
+every stage works, how to run + evaluate, and research citations). Then:
+- **[`docs/PROGRESS.md`](docs/PROGRESS.md)** — what's done / in-progress / left, phase by phase.
+- **[`docs/STATE.md`](docs/STATE.md)** — current status, how to run, known issues.
+- **[`docs/DECISIONS.md`](docs/DECISIONS.md)** / **[`docs/CHANGELOG.md`](docs/CHANGELOG.md)** — why / what changed.
+
 ## Research
 
 See `.planning/` for project context, requirements, roadmap, and per-phase research.
