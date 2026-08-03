@@ -98,10 +98,16 @@ def test_skipped_when_not_candidate():
     assert f.repro_evidence["status"] == "skipped_verdict"
 
 
+class _DeclineLLM:
+    # PoC agent fallback returns an unusable call snippet → no_driver.
+    def generate(self, prompt, model=None):
+        return {"llm_status": "success", "response": '{"call": "print(1)"}'}
+
+
 def test_no_driver_without_function():
     f = _finding(cwe_ids=["CWE-78"], file_path="<snippet>",
-                 code_snippet="os.system(user_in)\n")  # no def -> no entrypoint
-    verify_finding(f, runner=genuine_runner)
+                 code_snippet="os.system(user_in)\n")  # no def -> heuristic can't build
+    verify_finding(f, runner=genuine_runner, llm=_DeclineLLM())
     assert f.reproduced is None
     assert f.repro_evidence["status"] == "no_driver"
 

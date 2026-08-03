@@ -10,11 +10,15 @@ def build_taint_query(sink_line: int) -> str:
     5. Formatting it natively into JSON
     """
     
-    # We must properly escape the Scala code formatting
+    # Sources = method parameters (the canonical proxy for untrusted/external
+    # input), not every identifier — a real source→sink path, meaningful for the
+    # LLM PoC agent. If a method has no params, flows are simply empty (safe).
+    # ponytail: parameter-level sources; widen to tagged user-input calls
+    # (request.*, argv, environ) if recall on real repos falls short.
     scala_code = f"""
     val sink = cpg.call.lineNumber({sink_line}).l
-    val source = cpg.identifier.l
-    
+    val source = cpg.parameter.l
+
     val flows = sink.reachableByFlows(source).map {{ flow =>
         flow.elements.map {{ node =>
             Map("line" -> node.lineNumber.getOrElse(-1), "code" -> node.code)

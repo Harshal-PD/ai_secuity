@@ -46,10 +46,14 @@ services:
       ollama:
         condition: service_healthy
     restart: "no"
+    # Model is configurable via OLLAMA_MODEL (must match the app default in
+    # hackersec/analysis/llm/client.py). qwen2.5-coder:7b fits a 6GB GPU at Q4.
+    environment:
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5-coder:7b}
     entrypoint: >
       sh -c "
-        echo 'Pulling codellama model...' &&
-        curl -s http://ollama:11434/api/pull -d '{\"name\": \"codellama\"}' &&
+        echo \"Pulling $${OLLAMA_MODEL} model...\" &&
+        curl -s http://ollama:11434/api/pull -d \"{\\\"name\\\": \\\"$${OLLAMA_MODEL}\\\"}\" &&
         echo 'Model pull complete!'
       "
 

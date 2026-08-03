@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-08-03 (Phase 1b) — CPG-guided PoC synthesis
+
+Fallback driver builder for `verify/` when the heuristic can't construct one — LLM synthesizes the
+call snippet, guided by the CPG taint path, still gated by the Phase-1a differential oracle.
+
+- `analysis/verify/poc_agent.py` (new) — `synthesize_probe(finding, *, llm=None)`. LLM returns a
+  call snippet using `mod` + `HS_INPUT`; WE render payload vs control drivers (LLM never touches the
+  marker), so hardcoded/faked PoCs are still rejected. Returns a probe or `{"error": reason}`; never raises.
+- `analysis/verify/__init__.py` — `verify_finding` falls back to the agent when `build_probe` is None;
+  new `llm` injectable; status `llm_unavailable` vs `no_driver`. Differential logic unchanged.
+- `analysis/llm/client.py` — model env-configurable via `OLLAMA_MODEL` (default `qwen2.5-coder:7b`,
+  fits a 6GB GPU at Q4); was hardcoded `codellama`.
+- `analysis/joern/queries.py` — taint sources = method parameters (was every identifier) → real source→sink.
+- `docker-compose.yml` — `ollama-pull` pulls `${OLLAMA_MODEL:-qwen2.5-coder:7b}`.
+
+**Verified:** `test_poc_agent.py` → 5/5 (fake LLM: synthesized PoC reproduces, hardcoded rejected,
+invalid→no_driver, LLM-down→llm_unavailable). Regressions `test_verify.py` 8/8, `test_static_lang.py`
+6/6. Real GPU run on the RTX 3050 pending (user).
+
 ## 2026-08-02 (Phase 1a) — Anti-hardcoding differential oracle
 
 Novel-core start. Hardens `verify/` against the POC-GYM cheat class (a PoC that prints the success

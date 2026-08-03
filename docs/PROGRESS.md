@@ -30,13 +30,16 @@ in the same change as the code. Deep explanation of each piece → `OVERVIEW.md`
 - ✅ `test_static_lang.py` → 6/6 pass
 - ⚠️ Exit gate items needing DGX: real non-zero C-scan findings; worker `docker_available()==True`
 
-## Phase 1 — Anti-hardcoding oracle + CPG-guided PoC — 🔄 PARTIAL
+## Phase 1 — Anti-hardcoding oracle + CPG-guided PoC — ✅ DONE (code + unit tests)
 
 - ✅ **1a** Differential anti-hardcoding oracle (`verify/oracles.py`, `__init__.py`); rejects hardcoded
   PoCs (`hardcoded_rejected`). `test_verify.py` → 8/8 pass
-- ⬜ **1b** CPG-guided PoC agent (`verify/poc_agent.py`) — synthesize driver from CPG taint path when
-  the heuristic can't build one; validate via the differential oracle. **Needs Ollama** (fake-LLM testable)
-- ⬜ Refine `joern/queries.py` taint sources (currently every identifier is a source)
+- ✅ **1b** CPG-guided PoC agent (`verify/poc_agent.py`) — LLM synthesizes the call snippet
+  (placeholder-gated so anti-hardcoding holds), used when the heuristic can't build a driver;
+  validated via the SAME differential oracle. Model env-configurable (`OLLAMA_MODEL`, default
+  `qwen2.5-coder:7b`). `test_poc_agent.py` → 5/5 pass (fake LLM, no GPU)
+- ✅ Refined `joern/queries.py` taint sources → method parameters (was every identifier)
+- ⚠️ Real GPU end-to-end on the RTX 3050 (`ollama pull qwen2.5-coder:7b`) — user-run, pending
 
 ## Phase 2 — Reproduction-gated benchmark + metric — ⬜ NOT STARTED
 

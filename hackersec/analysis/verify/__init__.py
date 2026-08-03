@@ -14,17 +14,19 @@ import logging
 
 from hackersec.analysis.verify.oracles import build_probe, detect, ORACLE_CWES
 from hackersec.analysis.verify.sandbox import run_driver_in_docker
+from hackersec.analysis.verify.poc_agent import synthesize_probe
 
 logger = logging.getLogger(__name__)
 
 VERIFY_VERDICTS = {"true_positive", "uncertain"}
 
 
-def verify_finding(finding, *, job_id: str = "standalone", runner=None):
+def verify_finding(finding, *, job_id: str = "standalone", runner=None, llm=None):
     """Attempt to reproduce `finding`; mutate + return it.
 
     runner: injectable `(files, driver, *, timeout) -> {status, stdout, ...}`
-    for tests. Defaults to the real Docker sandbox.
+    for tests. llm: injectable client for the CPG-guided PoC fallback.
+    Both default to the real Docker sandbox / Ollama.
     """
     runner = runner or run_driver_in_docker
 
@@ -38,11 +40,17 @@ def verify_finding(finding, *, job_id: str = "standalone", runner=None):
         finding.repro_evidence = {"status": "not_checkable"}
         return finding
 
+    # Heuristic driver first; if it can't build one, fall back to CPG-guided
+    # PoC synthesis. Either way the SAME differential oracle validates below.
     probe = build_probe(finding)
     if probe is None:
-        finding.reproduced = None
-        finding.repro_evidence = {"status": "no_driver"}
-        return finding
+        alt = synthesize_probe(finding, llm=llm)
+        if "payload_driver" in alt:
+            probe = alt
+        else:
+            finding.reproduced = None
+            finding.repro_evidence = {"status": alt.get("error", "no_driver")}
+            return finding
 
     marker = probe["marker"]
 

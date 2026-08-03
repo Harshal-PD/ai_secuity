@@ -18,8 +18,12 @@ celery -A hackersec.worker.celery_app worker --loglevel=info
 python eval_run.py --dataset bigvul --limit 50 --verify   # → eval_results/YYYY-MM-DD_run.json
 python eval_run.py --dataset mock --no-cpg --no-llm        # fast offline smoke
 
-# Dynamic-verify self-check (no Docker needed)
-python test_verify.py
+# LLM model (env-configurable; default qwen2.5-coder:7b, fits a 6GB GPU at Q4)
+export OLLAMA_MODEL=qwen2.5-coder:7b   # then: ollama pull "$OLLAMA_MODEL"
+
+# Self-checks (no Docker/GPU needed)
+python test_verify.py        # differential oracle
+python test_poc_agent.py     # CPG-guided PoC synthesis (fake LLM)
 
 # Frontend
 cd hackersec-web && npm install && npm run dev

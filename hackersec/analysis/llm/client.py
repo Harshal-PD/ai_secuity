@@ -20,11 +20,13 @@ class OllamaClient:
         except httpx.RequestError:
             return False
 
-    def generate(self, prompt: str, model: str = "codellama") -> dict:
+    def generate(self, prompt: str, model: str = None) -> dict:
         """
         Invokes Ollama text generation endpoint sequentially.
-        DeepSeek variants usually yield strict boundaries via format constraints.
+        Model is configurable via OLLAMA_MODEL (default qwen2.5-coder:7b — fits a
+        6GB GPU at Q4; strong at code for PoC synthesis).
         """
+        model = model or os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b")
         payload = {
             "model": model,
             "prompt": prompt,
