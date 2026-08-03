@@ -9,6 +9,7 @@ from hackersec.analysis.schema import (
     SEMGREP_SEVERITY_MAP,
     BANDIT_SEVERITY_MAP,
 )
+from hackersec.ingestion.detector import detect_language, collect_source_files
 
 logger = logging.getLogger(__name__)
 
@@ -32,18 +33,46 @@ def _extract_snippet(file_path: str, start_line: int, end_line: int, context_lin
 
 # ─── Semgrep ────────────────────────────────────────────────────────────────
 
-SEMGREP_CONFIGS = [
-    "p/security-audit",
-    "p/owasp-top-ten",
-    "p/python",
-    "p/secrets",
-]
+# Multi-language base packs — applied to every scan regardless of language.
+SEMGREP_BASE_CONFIGS = ["p/security-audit", "p/owasp-top-ten", "p/secrets"]
+
+# Language-specific registry packs (verified slugs; p/c confirmed via registry).
+# Rules now adapt to the codebase's languages instead of always running p/python.
+SEMGREP_LANG_CONFIGS = {
+    "python": ["p/python"],
+    "javascript": ["p/javascript"],
+    "typescript": ["p/typescript"],
+    "go": ["p/golang"],
+    "java": ["p/java"],
+    "c": ["p/c"],
+    "cpp": ["p/c"],        # p/cpp not confirmed; p/c + base packs cover C++
+    "csharp": ["p/csharp"],
+    "ruby": ["p/ruby"],
+    "php": ["p/php"],
+}
+
+
+def select_semgrep_configs(target_path: Path) -> list[str]:
+    """Pick base packs + language packs for the languages actually present."""
+    if target_path.is_file():
+        langs = {detect_language(target_path)}
+    else:
+        langs = {detect_language(f) for f in collect_source_files(target_path)}
+    langs.discard("unknown")
+
+    configs = list(SEMGREP_BASE_CONFIGS)
+    for lang in sorted(langs):
+        for cfg in SEMGREP_LANG_CONFIGS.get(lang, []):
+            if cfg not in configs:
+                configs.append(cfg)
+    return configs
 
 
 def run_semgrep(target_path: Path, job_id: str) -> list[Finding]:
-    """Run Semgrep with security rule sets. Returns normalized Finding list."""
+    """Run Semgrep with language-aware security rule sets. Returns normalized Finding list."""
+    configs = select_semgrep_configs(target_path)
     cmd = ["semgrep", "scan", "--json", "--timeout", "60", "--metrics=off"]
-    for cfg in SEMGREP_CONFIGS:
+    for cfg in configs:
         cmd += ["--config", cfg]
     cmd.append(str(target_path))
 

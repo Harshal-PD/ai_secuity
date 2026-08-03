@@ -1,47 +1,59 @@
 import logging
-from hackersec.analysis.static import run_sast
-# Normally we would run the full pipeline sequentially
-# For synchronous testing locally, we'll mock the LLM/CPG steps passing directly to Fusion
-from hackersec.analysis.ml.inference import FusionClassifier
-from hackersec.analysis.schema import Finding
+from pathlib import Path
+
+from hackersec.analysis.static import run_static_analysis
+from hackersec.analysis.dedup import dedup_findings
+from hackersec.analysis.pipeline import analyze_findings
 
 logger = logging.getLogger(__name__)
 
-def evaluate_pipeline(meta_path: str, data: dict) -> list:
+
+def evaluate_pipeline(
+    meta_path: str,
+    data: dict,
+    *,
+    enable_cpg: bool = True,
+    enable_llm: bool = True,
+    enable_verify: bool = False,
+    limit: int | None = 50,
+) -> list:
+    """Run the REAL pipeline over labeled targets and collect predictions.
+
+    For each target file this runs the same chain as the worker
+    (static → dedup → CPG → RAG → LLM → fusion [→ verify]) — no mocks.
+
+    Three predictions per file:
+      - baseline_pred:  1 if Semgrep/Bandit produced any finding (SAST-only).
+      - hackersec_pred: 1 if fusion labels any finding `true_positive`.
+      - verified_pred:  1 if any finding was reproduced in the sandbox
+                        (only meaningful when enable_verify=True).
     """
-    Simulates finding processing loops exclusively capturing 
-    baseline (Semgrep-only) versus Full Pipeline outputs natively.
-    """
-    classifier = FusionClassifier()
     eval_results = []
-    
-    for filepath, meta in data.items():
-        # Baseline Execution
-        findings = run_sast(filepath)
-        
-        baseline_predicted = 1 if len(findings) > 0 else 0
-        
-        # HackerSec Fusion Execution
-        hackersec_predicted = 0
-        for f in findings:
-            # Mock the missing attributes gracefully for test strings
-            if not f.cpg_context:
-                f.cpg_context = {"cpg_status": "success", "taint_paths": ["mock"]}
-            if not getattr(f, "llm_analysis", None):
-                # We simulate good confidence when Semgrep hits on vulnerable rules
-                f.llm_analysis = {"confidence": 0.8}
-                
-            res = classifier.predict(f)
-            if res["prediction"] == "true_positive":
-                hackersec_predicted = 1
-                break
-                
+    items = list(data.items())
+    if limit is not None:
+        items = items[:limit]
+
+    for filepath, meta in items:
+        logger.info(f"[eval] Analyzing {filepath}")
+        findings = dedup_findings(run_static_analysis(Path(filepath), job_id="eval"))
+
+        baseline_pred = 1 if findings else 0
+
+        analyze_findings(
+            findings, filepath, job_id="eval",
+            enable_cpg=enable_cpg, enable_llm=enable_llm, enable_verify=enable_verify,
+        )
+
+        hackersec_pred = 1 if any(f.fusion_verdict == "true_positive" for f in findings) else 0
+        verified_pred = 1 if any(getattr(f, "reproduced", None) is True for f in findings) else 0
+
         eval_results.append({
             "file": filepath,
             "cwe": meta["cwe"],
             "true_label": meta["label"],
-            "baseline_pred": baseline_predicted,
-            "hackersec_pred": hackersec_predicted
+            "baseline_pred": baseline_pred,
+            "hackersec_pred": hackersec_pred,
+            "verified_pred": verified_pred,
         })
-        
+
     return eval_results

@@ -25,6 +25,7 @@ class Job(Base):
     __tablename__ = "jobs"
     id = Column(String, primary_key=True)
     status = Column(String, nullable=False, default="pending")  # pending|running|complete|failed
+    stage = Column(String, nullable=True)  # static|cpg|rag|llm|fusion|verify|patch — live progress
     target = Column(Text)
     target_type = Column(String)  # "file" | "git_url"
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -53,10 +54,34 @@ class FindingRecord(Base):
     fusion_verdict = Column(Text, nullable=True)
     patch = Column(Text, nullable=True)
     patch_status = Column(String(50), nullable=True)
+    reproduced = Column(String(10), nullable=True)   # "true" | "false" | null (not checkable)
+    repro_evidence = Column(Text, nullable=True)      # JSON dict
+
+
+# Columns added after the initial schema shipped. create_all() won't ALTER an
+# existing table, so add them idempotently on startup.
+# ponytail: ADD COLUMN only — fine for additive changes; a real migration tool
+# (alembic) is the upgrade path if the schema starts changing shape.
+_ADDED_COLUMNS = [
+    ("jobs", "stage", "VARCHAR"),
+    ("findings", "reproduced", "VARCHAR(10)"),
+    ("findings", "repro_evidence", "TEXT"),
+]
+
+
+def _ensure_columns():
+    from sqlalchemy import text
+    with engine.begin() as conn:
+        for table, col, coltype in _ADDED_COLUMNS:
+            try:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {coltype}"))
+            except Exception:
+                pass  # already exists
 
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+    _ensure_columns()
 
 
 def create_job(job_id: str, target: str, target_type: str) -> None:
@@ -66,12 +91,15 @@ def create_job(job_id: str, target: str, target_type: str) -> None:
         db.commit()
 
 
-def update_job(job_id: str, status: str, error: Optional[str] = None, finding_count: int = 0) -> None:
+def update_job(job_id: str, status: str, error: Optional[str] = None,
+               finding_count: int = 0, stage: Optional[str] = None) -> None:
     with SessionLocal() as db:
         job = db.get(Job, job_id)
         if job:
             job.status = status
             job.updated_at = datetime.utcnow()
+            if stage is not None:
+                job.stage = stage
             if error:
                 job.error = error
             if finding_count:
@@ -87,6 +115,7 @@ def get_job(job_id: str) -> Optional[dict]:
         return {
             "id": job.id,
             "status": job.status,
+            "stage": job.stage,
             "target": job.target,
             "target_type": job.target_type,
             "created_at": str(job.created_at),
@@ -117,6 +146,10 @@ def save_findings(job_id: str, findings: list) -> None:
                 fusion_verdict=getattr(f, 'fusion_verdict', None),
                 patch=getattr(f, 'patch', None),
                 patch_status=getattr(f, 'patch_status', None),
+                reproduced=(None if getattr(f, 'reproduced', None) is None
+                            else str(f.reproduced).lower()),
+                repro_evidence=(json.dumps(f.repro_evidence)
+                                if getattr(f, 'repro_evidence', None) else None),
             )
             db.add(record)
         db.commit()
@@ -145,6 +178,8 @@ def get_findings(job_id: str) -> list[dict]:
                 "fusion_verdict": r.fusion_verdict,
                 "patch": r.patch,
                 "patch_status": getattr(r, 'patch_status', None),
+                "reproduced": getattr(r, 'reproduced', None),
+                "repro_evidence": json.loads(r.repro_evidence) if getattr(r, 'repro_evidence', None) else None,
             }
             for r in records
         ]

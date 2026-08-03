@@ -2,11 +2,20 @@ import json
 import os
 from pathlib import Path
 
-def generate_test_suite(out_dir: str = "data/eval_set"):
+def generate_test_suite(out_dir: str = "data/eval_set", source: str = "mock", samples: int = 100):
     """
-    Generates a localized mock subset representing Juliet/Big-Vul offline tests 
-    preventing massive gigabyte downloads stalling pipelines.
+    Build a labeled test suite and return its metadata.json path.
+
+    source="mock": 3 hand-written files (fast smoke test, offline).
+    source="hf"/<dataset>: delegate to the HuggingFace loader for a real
+    research benchmark (bigvul/diversevul/juliet).
     """
+    if source != "mock":
+        from hackersec.evaluation.huggingface_loader import load_hf_dataset, DATASET_CONFIGS
+        dataset = "bigvul" if source == "hf" else source
+        if dataset in DATASET_CONFIGS:
+            return load_hf_dataset(dataset=dataset, samples=samples, out_dir=out_dir)
+        raise ValueError(f"Unknown source '{source}'")
     # Create the matrix limits securely simulating real python boundaries
     base = Path(out_dir)
     base.mkdir(parents=True, exist_ok=True)

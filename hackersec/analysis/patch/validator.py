@@ -3,29 +3,36 @@ import subprocess
 import json
 import logging
 import os
+from pathlib import Path
 from hackersec.analysis.schema import Finding
 
 logger = logging.getLogger(__name__)
 
+
 def validate_patch(finding: Finding, patch_text: str) -> str:
     """
-    Submits a mock validation string mapping exclusively against the local 
-    rule configuration proving standard regression offsets.
+    Re-run Semgrep on the patched code with the SAME rule packs the scan used
+    (language-aware), not a fixed p/ci. A patch is 'fixed' only if the exact
+    rule that flagged the finding no longer hits — otherwise the validator can
+    declare 'fixed' just because p/ci never ran that rule.
     """
     if not patch_text or not finding.rule_id:
         return "unverified"
-        
+
+    # Preserve the finding's language so the right packs + parser apply.
+    suffix = Path(finding.file_path).suffix or ".py"
+
     try:
-        # Create a temporary file safely mocking standard string writes
-        with tempfile.NamedTemporaryFile(suffix=".py", mode="w", delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=suffix, mode="w", delete=False, encoding="utf-8") as tmp:
             tmp.write(patch_text)
             tmp_path = tmp.name
-            
+
         try:
-            # We assume finding.rule_id matches standard configuration strings.
-            # Example rule: "python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-md5"
-            # It's better to run Semgrep targeting p/ci since local configs vary dynamically
-            cmd = ["semgrep", "--config", "p/ci", "--json", tmp_path]
+            from hackersec.analysis.static import select_semgrep_configs
+            cmd = ["semgrep", "--json", "--metrics=off"]
+            for cfg in select_semgrep_configs(Path(tmp_path)):
+                cmd += ["--config", cfg]
+            cmd.append(tmp_path)
             result = subprocess.run(cmd, capture_output=True, text=True, check=False)
             
             # Scrape validation loops masking stdout 

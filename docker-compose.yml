@@ -46,10 +46,14 @@ services:
       ollama:
         condition: service_healthy
     restart: "no"
+    # Model is configurable via OLLAMA_MODEL (must match the app default in
+    # hackersec/analysis/llm/client.py). qwen2.5-coder:7b fits a 6GB GPU at Q4.
+    environment:
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5-coder:7b}
     entrypoint: >
       sh -c "
-        echo 'Pulling codellama model...' &&
-        curl -s http://ollama:11434/api/pull -d '{\"name\": \"codellama\"}' &&
+        echo \"Pulling $${OLLAMA_MODEL} model...\" &&
+        curl -s http://ollama:11434/api/pull -d \"{\\\"name\\\": \\\"$${OLLAMA_MODEL}\\\"}\" &&
         echo 'Model pull complete!'
       "
 
@@ -105,6 +109,10 @@ services:
       - app_data:/app/data
       - db_data:/app/db_data
       - huggingface_cache:/root/.cache/huggingface
+      # Docker-out-of-docker: lets the exploit-verification sandbox
+      # (hackersec/analysis/verify/sandbox.py) spawn hardened containers on the
+      # host daemon. Requires the docker CLI in the worker image (see Dockerfile).
+      - /var/run/docker.sock:/var/run/docker.sock
     command: >
       celery -A hackersec.worker.celery_app worker
       --loglevel=info

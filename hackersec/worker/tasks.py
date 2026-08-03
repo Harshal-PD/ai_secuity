@@ -38,6 +38,7 @@ def run_analysis(self, job_id: str, target: str, target_type: str):
                 target_path = extract_dir
 
         # ── Step 2: Static analysis ───────────────────────────────────────
+        store.update_job(job_id, status="running", stage="static")
         logger.info(f"[{job_id}] Running static analysis on {target_path}")
         raw_findings = run_static_analysis(target_path, job_id=job_id)
         logger.info(f"[{job_id}] Raw findings: {len(raw_findings)}")
@@ -46,143 +47,9 @@ def run_analysis(self, job_id: str, target: str, target_type: str):
         findings = dedup_findings(raw_findings)
         logger.info(f"[{job_id}] After dedup: {len(findings)} findings")
 
-        # ── Step 3.5: CPG Enrichment ──────────────────────────────────────
-        from hackersec.analysis.joern.client import JoernClient
-        from hackersec.analysis.joern.exceptions import JoernConnectionError, JoernQueryError
-        
-        try:
-            joern_client = JoernClient()
-            cpg_workspace = f"job_{job_id}"
-            logger.info(f"[{job_id}] Initializing CPG on workspace {cpg_workspace}")
-            
-            # Joern API convention handling
-            joern_client.create_workspace(cpg_workspace)
-            joern_client.import_code(target_path, cpg_workspace)
-            
-            for f in findings:
-                logger.info(f"[{job_id}] Taint flow query: {f.file_path}:{f.line_start}")
-                cpg_res = joern_client.query_taint(cpg_workspace, str(f.file_path), f.line_start)
-                f.cpg_context = cpg_res
-                
-            logger.info(f"[{job_id}] CPG augmentation complete")
-            
-        except (JoernConnectionError, JoernQueryError) as e:
-            logger.warning(f"[{job_id}] Joern CPG pipeline failed gracefully: {e}")
-            for f in findings:
-                if not f.cpg_context:
-                    f.cpg_context = {"cpg_status": "failed", "error": str(e)}
-
-        # ── Step 3.7: RAG Enrichment ──────────────────────────────────────
-        from hackersec.analysis.rag import LocalRAGStore
-        
-        try:
-            # Reusing a persistent store logic if available, else instantiate locally
-            rag = LocalRAGStore()
-            for f in findings:
-                # Compile a semantic search query based on finding's properties
-                query_str = f"Security vulnerability {f.rule_id} "
-                if f.cwe_ids:
-                    query_str += " ".join(f.cwe_ids)
-                if f.owasp_category:
-                    query_str += f" {f.owasp_category}"
-                
-                logger.info(f"[{job_id}] RAG query: {query_str}")
-                rag_results = rag.search(query_str, top_k=2)
-                f.rag_docs = rag_results
-                
-            logger.info(f"[{job_id}] RAG enrichment complete")
-        except Exception as e:
-            logger.error(f"[{job_id}] RAG augmentation failed: {e}", exc_info=True)
-            for f in findings:
-                if not f.rag_docs:
-                    f.rag_docs = []
-                    
-        # ── Step 3.8: LLM Reasoning ───────────────────────────────────────
-        from hackersec.analysis.llm.client import OllamaClient
-        from hackersec.analysis.llm.prompter import build_analysis_prompt
-        from hackersec.analysis.llm.parser import parse_llm_response
-        
-        try:
-            llm_client = OllamaClient()
-            for f in findings:
-                # Compile strict bounds
-                prompt = build_analysis_prompt(f)
-                logger.info(f"[{job_id}] Evaluating findings against Ollama for {f.file_path}:{f.line_start}")
-                
-                # Fetch text mappings
-                llm_res = llm_client.generate(prompt)
-                
-                # Map LLM statuses or structure validation blocks
-                if llm_res["llm_status"] == "success":
-                     parsed = parse_llm_response(llm_res["response"])
-                     f.llm_analysis = parsed
-                else:
-                     f.llm_analysis = {"llm_status": llm_res["llm_status"], "error": llm_res.get("error")}
-                     
-            logger.info(f"[{job_id}] LLM structured mapping complete")
-            
-        except Exception as e:
-            logger.error(f"[{job_id}] LLM pipeline gracefully bounded exceptions: {e}")
-            for f in findings:
-                if not getattr(f, 'llm_analysis', None):
-                    f.llm_analysis = {"llm_status": "failed_connection", "error": str(e)}
-
-        # ── Step 3.9: ML Fusion Inference ─────────────────────────────────
-        from hackersec.analysis.ml.inference import FusionClassifier
-        
-        try:
-            # Reusing local cache object initialized for matrix isolation
-            classifier = FusionClassifier()
-            for f in findings:
-                res = classifier.predict(f)
-                # Map verdict output dynamically to DB persistence bounds
-                # SHAP components get strictly mapped safely stringified via json dumps
-                f.fusion_verdict = res["prediction"]
-                # We could append SHAP to fusion_verdict implicitly as string 
-                # To maintain database integrity without adding another schema column:
-                if res.get("shap_values"):
-                    f.llm_analysis["shap_values"] = res["shap_values"]
-                    
-            logger.info(f"[{job_id}] ML Classifier fusion completion")
-            
-        except Exception as e:
-            logger.error(f"[{job_id}] ML Inference crashed gracefully: {e}")
-            for f in findings:
-                 if not f.fusion_verdict:
-                     f.fusion_verdict = "uncertain"
-
-        # ── Step 3.10: Patch Generation ───────────────────────────────────
-        from hackersec.analysis.patch import build_patch_prompt, parse_patch, compute_diff, validate_patch
-        
-        try:
-            llm_client = OllamaClient() # Reuse Ollama client initialized in 3.8
-            for f in findings:
-                if f.fusion_verdict == "true_positive" and f.code_snippet:
-                    logger.info(f"[{job_id}] Generating patch for true positive at {f.file_path}:{f.line_start}")
-                    
-                    prompt = build_patch_prompt(f)
-                    llm_res = llm_client.generate(prompt)
-                    
-                    if llm_res["llm_status"] == "success":
-                        raw_patch = parse_patch(llm_res["response"])
-                        
-                        # Generate literal unified diff strings
-                        diff_text = compute_diff(f.code_snippet, raw_patch)
-                        f.patch = diff_text
-                        
-                        # Execute Semgrep rules verification on patched outputs
-                        status = validate_patch(f, raw_patch)
-                        f.patch_status = status
-                    else:
-                        f.patch_status = "failed_generation"
-                        
-            logger.info(f"[{job_id}] Patching validation loops complete")
-            
-        except Exception as e:
-             logger.error(f"[{job_id}] Patch generation failed elegantly: {e}")
-             for f in findings:
-                 if f.fusion_verdict == "true_positive" and not f.patch_status:
-                     f.patch_status = "error"
+        # ── Steps 3.5–3.11: Enrichment (CPG → RAG → LLM → Fusion → Verify → Patch) ──
+        from hackersec.analysis.pipeline import analyze_findings
+        analyze_findings(findings, target_path, job_id=job_id, enable_verify=True)
 
         # ── Step 4: Store results ─────────────────────────────────────────
         store.save_findings(job_id, findings)
