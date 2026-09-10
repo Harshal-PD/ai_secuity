@@ -10,7 +10,7 @@ HackerSec is a research-grade pipeline for detecting vulnerabilities in source c
 Code Input → Static Analysis (Semgrep + Bandit)
           → CPG (Joern taint flows)
           → RAG (CWE/OWASP retrieval via FAISS)
-          → LLM Reasoning (DeepSeek-Coder via Ollama)
+          → Adversarial Board: Attacker → Defender → Judge (Qwen2.5-Coder via Ollama)
           → Fusion Classifier (scikit-learn + SHAP)
           → Patch Generator
           → Dashboard

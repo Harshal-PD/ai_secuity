@@ -97,30 +97,28 @@ def run_analysis(self, job_id: str, target: str, target_type: str):
                 if not f.rag_docs:
                     f.rag_docs = []
                     
-        # ── Step 3.8: LLM Reasoning ───────────────────────────────────────
+        # ── Step 3.8: Adversarial Board (Attacker → Defender → Judge) ─────
         from hackersec.analysis.llm.client import OllamaClient
-        from hackersec.analysis.llm.prompter import build_analysis_prompt
-        from hackersec.analysis.llm.parser import parse_llm_response
-        
+        from hackersec.analysis.llm.board import AdversarialBoard
+
+        llm_client = OllamaClient()
+
         try:
-            llm_client = OllamaClient()
+            board = AdversarialBoard(client=llm_client)
             for f in findings:
-                # Compile strict bounds
-                prompt = build_analysis_prompt(f)
-                logger.info(f"[{job_id}] Evaluating findings against Ollama for {f.file_path}:{f.line_start}")
-                
-                # Fetch text mappings
-                llm_res = llm_client.generate(prompt)
-                
-                # Map LLM statuses or structure validation blocks
-                if llm_res["llm_status"] == "success":
-                     parsed = parse_llm_response(llm_res["response"])
-                     f.llm_analysis = parsed
-                else:
-                     f.llm_analysis = {"llm_status": llm_res["llm_status"], "error": llm_res.get("error")}
-                     
-            logger.info(f"[{job_id}] LLM structured mapping complete")
-            
+                logger.info(f"[{job_id}] Convening board for {f.file_path}:{f.line_start}")
+
+                verdict = board.deliberate(f)
+                f.llm_analysis = verdict
+
+                if verdict.get("llm_status") == "success":
+                    logger.info(
+                        f"[{job_id}] Board ruled {verdict['board_verdict']} "
+                        f"(P_real={verdict['confidence']}) for {f.file_path}:{f.line_start}"
+                    )
+
+            logger.info(f"[{job_id}] LLM board deliberation complete")
+
         except Exception as e:
             logger.error(f"[{job_id}] LLM pipeline gracefully bounded exceptions: {e}")
             for f in findings:
@@ -154,14 +152,21 @@ def run_analysis(self, job_id: str, target: str, target_type: str):
         # ── Step 3.10: Patch Generation ───────────────────────────────────
         from hackersec.analysis.patch import build_patch_prompt, parse_patch, compute_diff, validate_patch
         
+        from hackersec.analysis.llm.client import MODEL_PATCHER
+
         try:
-            llm_client = OllamaClient() # Reuse Ollama client initialized in 3.8
             for f in findings:
                 if f.fusion_verdict == "true_positive" and f.code_snippet:
                     logger.info(f"[{job_id}] Generating patch for true positive at {f.file_path}:{f.line_start}")
                     
                     prompt = build_patch_prompt(f)
-                    llm_res = llm_client.generate(prompt)
+                    # The patcher emits raw source, so JSON-constrained decoding is off.
+                    llm_res = llm_client.generate(
+                        prompt,
+                        model=MODEL_PATCHER,
+                        json_mode=False,
+                        temperature=0.1,
+                    )
                     
                     if llm_res["llm_status"] == "success":
                         raw_patch = parse_patch(llm_res["response"])

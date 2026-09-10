@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { UploadCloud, Shield, ShieldCheck, CheckCircle, AlertTriangle, XCircle, Activity, ChevronDown, ChevronUp, FileWarning, Info } from 'lucide-react'
+import { UploadCloud, Shield, ShieldCheck, CheckCircle, AlertTriangle, XCircle, Activity, ChevronDown, ChevronUp, FileWarning, Info, Users } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts'
 import './index.css'
 
@@ -245,7 +245,7 @@ export default function App() {
                 <div className="spinner" style={{ margin: '0 auto 1rem' }}></div>
                 <p>Running security analysis pipeline...</p>
                 <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-                  Semgrep → Bandit → Joern CPG → RAG Lookup → LLM Analysis → ML Fusion
+                  Semgrep → Bandit → Joern CPG → RAG Lookup → Attacker/Defender/Judge → ML Fusion
                 </p>
               </div>
             )}
@@ -282,6 +282,33 @@ function StatBox({ label, value, color }) {
     }}>
       <div style={{ fontSize: '1.5rem', fontWeight: 700, color, fontFamily: "'Outfit', sans-serif" }}>{value}</div>
       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>{label}</div>
+    </div>
+  )
+}
+
+function BoardSeat({ label, color, score, scoreLabel, lines }) {
+  const populated = lines.filter(([, value]) => value && value !== 'unknown')
+  if (populated.length === 0) return null
+
+  return (
+    <div style={{
+      marginBottom: '0.6rem', padding: '0.75rem 0.9rem',
+      background: 'rgba(0,0,0,0.2)', borderRadius: '6px',
+      borderLeft: `2px solid ${color}`
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+        <span style={{ fontSize: '0.8rem', fontWeight: 600, color }}>{label}</span>
+        {score !== undefined && score !== null && (
+          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+            {scoreLabel}: {(score * 100).toFixed(0)}%
+          </span>
+        )}
+      </div>
+      {populated.map(([key, value]) => (
+        <p key={key} style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.55, marginTop: '0.2rem' }}>
+          <strong style={{ color: 'var(--text-main)' }}>{key}:</strong> {value}
+        </p>
+      ))}
     </div>
   )
 }
@@ -375,6 +402,54 @@ function FindingCard({ finding, index }) {
                      </span>
                    </div>
                  )}
+               </div>
+             )}
+
+             {/* Adversarial Board Debate */}
+             {finding.llm_analysis && finding.llm_analysis.board && (
+               <div style={{ marginBottom: '1.25rem' }}>
+                 <h4 style={{ fontSize: '0.85rem', marginBottom: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                   <Users size={14} /> Adversarial Board
+                   {finding.llm_analysis.board_verdict && (
+                     <span className={`badge ${finding.llm_analysis.board_verdict === 'TRUE_POSITIVE' ? 'badge-danger' : 'badge-success'}`} style={{ fontSize: '0.7rem' }}>
+                       Judge: {finding.llm_analysis.board_verdict.replace('_', ' ')}
+                     </span>
+                   )}
+                 </h4>
+
+                 <BoardSeat
+                   label="Attacker (Red Team)"
+                   color="#ef4444"
+                   score={finding.llm_analysis.board.attacker?.exploitability_confidence}
+                   scoreLabel="Exploitability"
+                   lines={[
+                     ['Exploit path', finding.llm_analysis.board.attacker?.exploit_path],
+                     ['Preconditions', finding.llm_analysis.board.attacker?.preconditions],
+                     ['Impact', finding.llm_analysis.board.attacker?.impact],
+                   ]}
+                 />
+
+                 <BoardSeat
+                   label="Defender (Blue Team)"
+                   color="#3b82f6"
+                   score={finding.llm_analysis.board.defender?.safety_confidence}
+                   scoreLabel="Claimed safety"
+                   lines={[
+                     ['Sanitization evidence', finding.llm_analysis.board.defender?.sanitization_evidence],
+                     ['Mitigating controls', finding.llm_analysis.board.defender?.mitigating_controls],
+                     ['Rebuttal', finding.llm_analysis.board.defender?.rebuttal],
+                   ]}
+                 />
+
+                 <BoardSeat
+                   label="Judge (Arbitrator)"
+                   color="#eab308"
+                   score={finding.llm_analysis.board.judge?.verdict_confidence}
+                   scoreLabel="Verdict certainty"
+                   lines={[
+                     ['Reasoning', finding.llm_analysis.board.judge?.reasoning],
+                   ]}
+                 />
                </div>
              )}
 

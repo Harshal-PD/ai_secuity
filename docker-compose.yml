@@ -25,6 +25,8 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=7
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      # Keep weights resident across the three board seats to avoid a reload per finding
+      - OLLAMA_KEEP_ALIVE=30m
     deploy:
       resources:
         reservations:
@@ -40,6 +42,8 @@ services:
       start_period: 60s
 
   # ── Ollama Model Puller (one-shot init container) ──────────────────────
+  # qwen2.5-coder:14b is ~9 GB on disk / ~11 GB VRAM at 8k context, so all three
+  # board seats share one resident copy and stay well under a 24 GB card.
   ollama-pull:
     image: curlimages/curl:latest
     depends_on:
@@ -48,8 +52,8 @@ services:
     restart: "no"
     entrypoint: >
       sh -c "
-        echo 'Pulling codellama model...' &&
-        curl -s http://ollama:11434/api/pull -d '{\"name\": \"codellama\"}' &&
+        echo 'Pulling qwen2.5-coder:14b model...' &&
+        curl -s http://ollama:11434/api/pull -d '{\"name\": \"qwen2.5-coder:14b\"}' &&
         echo 'Model pull complete!'
       "
 
