@@ -8,7 +8,7 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -23,17 +23,17 @@ services:
       - ollama_data:/root/.ollama
     runtime: nvidia
     environment:
-      - NVIDIA_VISIBLE_DEVICES=${HACKERSEC_GPU_ID:-all}
+      - NVIDIA_VISIBLE_DEVICES=7
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['${HACKERSEC_GPU_ID:-all}']
-              capabilities: [gpu]
+              device_ids: [ '7' ]
+              capabilities: [ gpu ]
     healthcheck:
-      test: ["CMD-SHELL", "ollama list || exit 1"]
+      test: [ "CMD-SHELL", "ollama list || exit 1" ]
       interval: 15s
       timeout: 10s
       retries: 15
@@ -59,13 +59,13 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
-    command: ["joern", "--server", "--server-host", "0.0.0.0", "--server-port", "8080"]
+    command: [ "joern", "--server", "--server-host", "0.0.0.0", "--server-port", "8080" ]
     volumes:
       - joern_data:/tmp/joern
       - app_workspace:/app/workspace
     working_dir: /app
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/ || exit 1"]
+      test: [ "CMD-SHELL", "curl -f http://localhost:8080/ || exit 1" ]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -87,7 +87,7 @@ services:
       - app_data:/app/data
       - db_data:/app/db_data
       - huggingface_cache:/root/.cache/huggingface
-    command: ["uvicorn", "hackersec.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    command: [ "uvicorn", "hackersec.main:app", "--host", "0.0.0.0", "--port", "8000" ]
 
   # ── Celery Worker (same image, different command) ──────────────────────
   worker:
@@ -106,10 +106,7 @@ services:
       - db_data:/app/db_data
       - huggingface_cache:/root/.cache/huggingface
     command: >
-      celery -A hackersec.worker.celery_app worker
-      --loglevel=info
-      --pool=solo
-      --concurrency=2
+      celery -A hackersec.worker.celery_app worker --loglevel=info --pool=solo --concurrency=2
 
   # ── React Frontend (nginx) ────────────────────────────────────────────
   frontend:
