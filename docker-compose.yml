@@ -17,8 +17,9 @@ services:
   ollama:
     image: ollama/ollama:latest
     restart: unless-stopped
-    ports:
-      - "11434:11434"
+    # Do not bind 11434 on the DGX host — that port is often already taken by
+    # a system Ollama. Backend/worker reach this service as http://ollama:11434
+    # on the Compose network.
     volumes:
       - ollama_data:/root/.ollama
     runtime: nvidia
