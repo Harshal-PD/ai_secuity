@@ -123,6 +123,11 @@ services:
       - "3000:80"
     depends_on:
       - backend
+    # DGX CentOS 7 (kernel 3.10) cannot pwrite() to /run/nginx.pid.
+    # Move the PID before nginx starts so even the old 1.31 image stays up.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - "sed -i 's|pid /run/nginx.pid;|pid /tmp/nginx.pid;|' /etc/nginx/nginx.conf && exec /docker-entrypoint.sh nginx -g 'daemon off;'"
 
 volumes:
   redis_data:
