@@ -123,11 +123,20 @@ services:
       - "3000:80"
     depends_on:
       - backend
-    # DGX CentOS 7 (kernel 3.10) cannot pwrite() to /run/nginx.pid.
-    # Move the PID before nginx starts so even the old 1.31 image stays up.
+    # Overlayfs on CentOS 7 cannot pwrite() files that exist in the image
+    # layer (/run/nginx.pid). Start nginx from a fresh config whose PID is /tmp.
     entrypoint: ["/bin/sh", "-c"]
     command:
-      - "sed -i 's|pid /run/nginx.pid;|pid /tmp/nginx.pid;|' /etc/nginx/nginx.conf && exec /docker-entrypoint.sh nginx -g 'daemon off;'"
+      - >-
+        rm -f /run/nginx.pid /var/run/nginx.pid;
+        printf '%s\n'
+        'worker_processes auto;'
+        'error_log stderr notice;'
+        'pid /tmp/nginx.pid;'
+        'events { worker_connections 1024; }'
+        'http { include /etc/nginx/mime.types; default_type application/octet-stream; sendfile on; keepalive_timeout 65; include /etc/nginx/conf.d/*.conf; }'
+        > /tmp/nginx.conf
+        && exec nginx -c /tmp/nginx.conf -g 'daemon off;'
 
 volumes:
   redis_data:
