@@ -24,7 +24,9 @@ services:
       - ollama_data:/root/.ollama
     runtime: nvidia
     environment:
-      - NVIDIA_VISIBLE_DEVICES=7
+      # Set by ./start.sh (emptiest GPU, N emptiest, or all).
+      # Falls back to every GPU if you run compose without the script.
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       # Keep weights resident across the three board seats to avoid a reload per finding
       - OLLAMA_KEEP_ALIVE=30m
@@ -33,7 +35,9 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: [ '7' ]
+              # Do not pin a device_id here. NVIDIA_VISIBLE_DEVICES decides
+              # which cards Ollama sees; Ollama shards a large model across them.
+              count: all
               capabilities: [ gpu ]
     healthcheck:
       test: [ "CMD-SHELL", "ollama list || exit 1" ]
@@ -123,6 +127,14 @@ services:
       - "3000:80"
     depends_on:
       - backend
+    # CentOS 7 overlayfs cannot pwrite(); nginx 1.31 writes the PID that way.
+    # tmpfs is a real in-memory fs, so the PID write succeeds.
+    tmpfs:
+      - /tmp
+      - /run
+      - /var/run
+    security_opt:
+      - seccomp:unconfined
     # Overlayfs on CentOS 7 cannot pwrite() files that exist in the image
     # layer (/run/nginx.pid). Start nginx from a fresh config whose PID is /tmp.
     entrypoint: ["/bin/sh", "-c"]
