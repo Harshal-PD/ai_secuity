@@ -1,0 +1,4 @@
+# Real-world evaluation only (python -m hackersec.evaluation.realworld).
+# Kept separate so adding it does not invalidate the cached requirements layer.
+pyarrow>=15.0.0
+huggingface_hub>=0.23.0

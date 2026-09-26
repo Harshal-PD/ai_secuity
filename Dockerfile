@@ -13,6 +13,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Separate layer: changing eval deps must not reinstall torch & co.
+COPY requirements-eval.txt .
+RUN pip install --no-cache-dir -r requirements-eval.txt
+
 # Copy application code
 COPY hackersec/ hackersec/
 COPY eval_run.py .

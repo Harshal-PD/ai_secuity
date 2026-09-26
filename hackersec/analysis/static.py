@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -40,10 +41,25 @@ SEMGREP_CONFIGS = [
 ]
 
 
+def _semgrep_configs() -> list[str]:
+    """
+    Registry packs are downloaded from semgrep.dev on every scan, so a dropped
+    connection silently yields zero findings. When SEMGREP_RULES_DIR holds
+    vendored copies of the packs, scan offline against those instead.
+    """
+    rules_dir = os.getenv("SEMGREP_RULES_DIR")
+    if rules_dir:
+        local = sorted(Path(rules_dir).glob("*.yml"))
+        if local:
+            return [str(p) for p in local]
+        logger.warning(f"SEMGREP_RULES_DIR={rules_dir} has no .yml files; using the registry")
+    return SEMGREP_CONFIGS
+
+
 def run_semgrep(target_path: Path, job_id: str) -> list[Finding]:
     """Run Semgrep with security rule sets. Returns normalized Finding list."""
     cmd = ["semgrep", "scan", "--json", "--timeout", "60", "--metrics=off"]
-    for cfg in SEMGREP_CONFIGS:
+    for cfg in _semgrep_configs():
         cmd += ["--config", cfg]
     cmd.append(str(target_path))
 
@@ -56,6 +72,7 @@ def run_semgrep(target_path: Path, job_id: str) -> list[Finding]:
             text=True,
             timeout=120,
             errors="replace",
+            env={**os.environ, "SEMGREP_ENABLE_VERSION_CHECK": "0"},
         )
     except subprocess.TimeoutExpired:
         logger.warning(f"[{job_id}] Semgrep timed out after 120s")

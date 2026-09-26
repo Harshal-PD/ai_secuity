@@ -1,0 +1,170 @@
+{
+  "data\\eval_set\\vuln_sqli.py": {
+    "label": 1,
+    "cwe": "CWE-89",
+    "pair_id": "sqli",
+    "kind": "vulnerable",
+    "expected_sanitizer": null
+  },
+  "data\\eval_set\\safe_sqli.py": {
+    "label": 0,
+    "cwe": "CWE-89",
+    "pair_id": "sqli",
+    "kind": "neutralized",
+    "expected_sanitizer": "int(user_id)"
+  },
+  "data\\eval_set\\vuln_oscmd.py": {
+    "label": 1,
+    "cwe": "CWE-78",
+    "pair_id": "oscmd",
+    "kind": "vulnerable",
+    "expected_sanitizer": null
+  },
+  "data\\eval_set\\safe_oscmd.py": {
+    "label": 0,
+    "cwe": "CWE-78",
+    "pair_id": "oscmd",
+    "kind": "neutralized",
+    "expected_sanitizer": "int(pid)"
+  },
+  "data\\eval_set\\vuln_shell.py": {
+    "label": 1,
+    "cwe": "CWE-77",
+    "pair_id": "shell",
+    "kind": "vulnerable",
+    "expected_sanitizer": null
+  },
+  "data\\eval_set\\safe_shell.py": {
+    "label": 0,
+    "cwe": "CWE-77",
+    "pair_id": "shell",
+    "kind": "neutralized",
+    "expected_sanitizer": "shell=False"
+  },
+  "data\\eval_set\\vuln_eval.py": {
+    "label": 1,
+    "cwe": "CWE-94",
+    "pair_id": "eval",
+    "kind": "vulnerable",
+    "expected_sanitizer": null
+  },
+  "data\\eval_set\\safe_eval.py": {
+    "label": 0,
+    "cwe": "CWE-94",
+    "pair_id": "eval",
+    "kind": "neutralized",
+    "expected_sanitizer": "int(raw_value)"
+  },
+  "data\\eval_set\\vuln_path.py": {
+    "label": 1,
+    "cwe": "CWE-22",
+    "pair_id": "path",
+    "kind": "vulnerable",
+    "expected_sanitizer": null
+  },
+  "data\\eval_set\\safe_path.py": {
+    "label": 0,
+    "cwe": "CWE-22",
+    "pair_id": "path",
+    "kind": "neutralized",
+    "expected_sanitizer": "os.path.basename(name)"
+  },
+  "data\\eval_set\\vuln_pickle.py": {
+    "label": 1,
+    "cwe": "CWE-502",
+    "pair_id": "pickle",
+    "kind": "vulnerable",
+    "expected_sanitizer": null
+  },
+  "data\\eval_set\\safe_pickle.py": {
+    "label": 0,
+    "cwe": "CWE-502",
+    "pair_id": "pickle",
+    "kind": "neutralized",
+    "expected_sanitizer": "hmac.compare_digest(expected, signature)"
+  },
+  "data\\eval_set\\vuln_weakhash.py": {
+    "label": 1,
+    "cwe": "CWE-327",
+    "pair_id": "weakhash",
+    "kind": "vulnerable",
+    "expected_sanitizer": null
+  },
+  "data\\eval_set\\safe_weakhash.py": {
+    "label": 0,
+    "cwe": "CWE-327",
+    "pair_id": "weakhash",
+    "kind": "neutralized",
+    "expected_sanitizer": "usedforsecurity=False"
+  },
+  "data\\eval_set\\vuln_secret.py": {
+    "label": 1,
+    "cwe": "CWE-798",
+    "pair_id": "secret",
+    "kind": "vulnerable",
+    "expected_sanitizer": null
+  },
+  "data\\eval_set\\safe_secret.py": {
+    "label": 0,
+    "cwe": "CWE-798",
+    "pair_id": "secret",
+    "kind": "neutralized",
+    "expected_sanitizer": "os.environ[\"DB_PASSWORD\"]"
+  },
+  "data\\eval_set\\vuln_xxe.py": {
+    "label": 1,
+    "cwe": "CWE-611",
+    "pair_id": "xxe",
+    "kind": "vulnerable",
+    "expected_sanitizer": null
+  },
+  "data\\eval_set\\safe_xxe.py": {
+    "label": 0,
+    "cwe": "CWE-611",
+    "pair_id": "xxe",
+    "kind": "neutralized",
+    "expected_sanitizer": "STATIC_CONFIG"
+  },
+  "data\\eval_set\\vuln_ssrf.py": {
+    "label": 1,
+    "cwe": "CWE-918",
+    "pair_id": "ssrf",
+    "kind": "vulnerable",
+    "expected_sanitizer": null
+  },
+  "data\\eval_set\\safe_ssrf.py": {
+    "label": 0,
+    "cwe": "CWE-918",
+    "pair_id": "ssrf",
+    "kind": "neutralized",
+    "expected_sanitizer": "if host not in ALLOWED_HOSTS"
+  },
+  "data\\eval_set\\vuln_xss.py": {
+    "label": 1,
+    "cwe": "CWE-79",
+    "pair_id": "xss",
+    "kind": "vulnerable",
+    "expected_sanitizer": null
+  },
+  "data\\eval_set\\safe_xss.py": {
+    "label": 0,
+    "cwe": "CWE-79",
+    "pair_id": "xss",
+    "kind": "neutralized",
+    "expected_sanitizer": "html.escape(name)"
+  },
+  "data\\eval_set\\vuln_random.py": {
+    "label": 1,
+    "cwe": "CWE-330",
+    "pair_id": "random",
+    "kind": "vulnerable",
+    "expected_sanitizer": null
+  },
+  "data\\eval_set\\safe_random.py": {
+    "label": 0,
+    "cwe": "CWE-330",
+    "pair_id": "random",
+    "kind": "neutralized",
+    "expected_sanitizer": "secrets.token_hex(32)"
+  }
+}

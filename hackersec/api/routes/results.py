@@ -55,7 +55,7 @@ def get_metrics():
             "raw_counts": {}
         }
         
-    # Sort by datestring, get latest
-    latest_file = sorted(jsons)[-1]
+    # Newest by mtime — filenames carry a timestamp but formats have changed.
+    latest_file = max(jsons, key=os.path.getmtime)
     with open(latest_file, "r") as f:
          return json.load(f)

@@ -35,3 +35,9 @@ data/uploads/
 
 # Planning (optional: remove if you want to track planning artifacts)
 # .planning/
+
+# Real-world evaluation: checkpoints/logs are large and machine-specific; reports stay committable
+eval_results/realworld*/results.jsonl
+eval_results/realworld*/eval.log
+eval_results/realworld*/status.json
+

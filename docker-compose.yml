@@ -96,6 +96,8 @@ services:
       - app_data:/app/data
       - db_data:/app/db_data
       - huggingface_cache:/root/.cache/huggingface
+      # /api/metrics serves the newest evaluation report from here.
+      - ./eval_results:/app/eval_results:ro
     command: [ "uvicorn", "hackersec.main:app", "--host", "0.0.0.0", "--port", "8000" ]
 
   # ── Celery Worker (same image, different command) ──────────────────────
@@ -116,6 +118,38 @@ services:
       - huggingface_cache:/root/.cache/huggingface
     command: >
       celery -A hackersec.worker.celery_app worker --loglevel=info --pool=solo --concurrency=2
+
+  # ── Real-world evaluation (opt-in: ./eval.sh start) ────────────────────
+  # Runs detached under dockerd, so an SSH/internet drop does not touch it.
+  # Every phase checkpoints; a restart or reboot resumes where it stopped.
+  eval:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: [ "eval" ]
+    restart: unless-stopped
+    stop_grace_period: 60s
+    env_file:
+      - .env.docker
+    environment:
+      - REALWORLD_DIR=/app/workspace/realworld
+      - REALWORLD_RESULTS_DIR=/app/eval_results/realworld
+      - SEMGREP_RULES_DIR=/app/workspace/realworld/semgrep_rules
+      - REALWORLD_TARGET_CVEFIXES=${REALWORLD_TARGET_CVEFIXES:-500}
+      - REALWORLD_TARGET_VUDENC=${REALWORLD_TARGET_VUDENC:-250}
+      - REALWORLD_GIT_COMMIT=${REALWORLD_GIT_COMMIT:-unknown}
+    depends_on:
+      ollama:
+        condition: service_started
+      joern:
+        condition: service_started
+    volumes:
+      # Joern imports code by path; /app/workspace is the volume it shares.
+      - app_workspace:/app/workspace
+      - app_data:/app/data
+      - huggingface_cache:/root/.cache/huggingface
+      - ./eval_results:/app/eval_results
+    command: [ "sh", "/app/hackersec/evaluation/realworld/entrypoint.sh" ]
 
   # ── React Frontend (nginx) ────────────────────────────────────────────
   frontend:
