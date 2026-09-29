@@ -151,14 +151,29 @@ class JoernClient:
 
     # ── Queries ─────────────────────────────────────────────────────────────
 
-    def query_taint(self, workspace_name: str, file_name: str, line_num: int) -> dict:
+    def query_taint(
+        self,
+        workspace_name: str,
+        file_name: str,
+        line_num: int,
+        sink_name: str | None = None,
+        source_regex: str | None = None,
+        method_line: int | None = None,
+    ) -> dict:
         """
         Data flows from untrusted sources into the call on `line_num`.
 
         `workspace_name` is unused (the imported project is active); it stays
-        in the signature for existing callers.
+        in the signature for existing callers. The optional arguments apply an
+        LLM-labelled source/sink specification (see `build_taint_query`).
         """
-        query = build_taint_query(line_num, file_hint=file_name or None)
+        query = build_taint_query(
+            line_num,
+            file_hint=file_name or None,
+            sink_name=sink_name,
+            extra_source_regex=source_regex,
+            method_line=method_line,
+        )
         try:
             res = self._execute_raw(query)
         except httpx.RequestError as e:

@@ -10,20 +10,32 @@
 #   ./eval.sh retry     after completion: re-run samples whose LLM calls failed
 #   ./eval.sh smoke     ~20 min foreground test on 3+2 pairs (separate dirs)
 #
-# Results go to eval_results/$REALWORLD_RUN (default realworld_v2); the dataset
+# Results go to eval_results/$REALWORLD_RUN (default realworld_v3); the dataset
 # in workspace/realworld is built once and shared by every run.
-# Pick the GPU first with ./start.sh (it writes NVIDIA_VISIBLE_DEVICES to .env).
+# Pick the GPUs first with ./start.sh (it writes them to .env); for a fast
+# run on free GPUs: ./start.sh --replicas 4, which also sets the workers.
 # FORCE=1 ./eval.sh start skips the GPU check.
 
 set -euo pipefail
 cd "$(dirname "$0")"
 
 export REALWORLD_GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-export REALWORLD_RUN="${REALWORLD_RUN:-realworld_v2}"
-DC="docker compose --profile eval"
+export REALWORLD_RUN="${REALWORLD_RUN:-realworld_v3}"
+DC="docker compose --profile eval --profile replicas"
 M="python -m hackersec.evaluation.realworld"
 RESULTS="eval_results/$REALWORLD_RUN"
 STATUS_FILE="$RESULTS/status.json"
+
+envval() {
+  grep -E "^$1=" .env 2>/dev/null | tail -n 1 | cut -d= -f2- || true
+}
+
+# Ollama/Joern services named in .env by ./start.sh (just the main ones by default).
+N_OLLAMA="${OLLAMA_REPLICAS:-$(envval OLLAMA_REPLICAS)}"
+N_JOERN="${JOERN_REPLICAS:-$(envval JOERN_REPLICAS)}"
+SERVERS="ollama joern"
+for ((i = 2; i <= ${N_OLLAMA:-1}; i++)); do SERVERS="$SERVERS ollama-$i"; done
+for ((i = 2; i <= ${N_JOERN:-1}; i++)); do SERVERS="$SERVERS joern-$i"; done
 
 running() {
   [[ -n "$($DC ps -q --status running eval 2>/dev/null)" ]]
@@ -38,7 +50,8 @@ case "${1:-status}" in
     mkdir -p "$RESULTS"
     # Ollama/Joern are started if missing but never recreated here, so a
     # running Ollama keeps the GPU ./start.sh gave it.
-    $DC up -d ollama joern
+    # shellcheck disable=SC2086
+    $DC up -d $SERVERS
     $DC build eval
     if [[ "${FORCE:-0}" != "1" ]]; then
       if ! check 300; then
@@ -100,21 +113,23 @@ case "${1:-status}" in
     ;;
   smoke)
     mkdir -p eval_results
-    $DC up -d ollama joern
+    # shellcheck disable=SC2086
+    $DC up -d $SERVERS
     $DC build eval
     check 300
     $DC run --rm --no-deps \
       -e REALWORLD_DIR=/app/workspace/realworld_smoke \
       -e REALWORLD_RESULTS_DIR=/app/eval_results/realworld_smoke \
       -e SEMGREP_RULES_DIR=/app/workspace/realworld_smoke/semgrep_rules \
-      eval sh -c "$M build --target-cvefixes 3 --target-vudenc 2 \
+      eval sh -c "rm -rf /app/eval_results/realworld_smoke \
+                  && $M build --target-cvefixes 3 --target-vudenc 2 \
                   && HF_HUB_OFFLINE=1 $M run \
                   && HF_HUB_OFFLINE=1 $M report"
     echo ""
     echo "Smoke report: eval_results/realworld_smoke/report_latest.md"
     ;;
   *)
-    sed -n '2,17p' "$0" | sed 's/^# \?//'
+    sed -n '2,19p' "$0" | sed 's/^# \?//'
     exit 1
     ;;
 esac

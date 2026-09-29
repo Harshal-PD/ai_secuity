@@ -20,13 +20,16 @@ def _relative_to(path: str, root: Path) -> str:
         return Path(path).name
 
 
-def enrich_with_cpg(findings: list, target_path: Path, job_id: str = "standalone", client=None) -> str:
+def enrich_with_cpg(
+    findings: list, target_path: Path, job_id: str = "standalone", client=None, extra=None
+) -> str:
     """
     Attach Joern taint flows to each finding. Returns a status string.
 
     `target_path` may be a file or a directory; a file's directory is imported
     so the CPG stays small. Joern resolves the path itself, so it must be on a
-    volume the Joern container shares.
+    volume the Joern container shares. `extra(client, project, rel_path)` runs
+    further queries against the same imported project before it is deleted.
     """
     from hackersec.analysis.joern.client import JoernClient
     from hackersec.analysis.joern.exceptions import (
@@ -34,7 +37,7 @@ def enrich_with_cpg(findings: list, target_path: Path, job_id: str = "standalone
         JoernQueryError,
     )
 
-    if not findings:
+    if not findings and extra is None:
         return "skipped_no_findings"
 
     target = Path(target_path)
@@ -66,6 +69,12 @@ def enrich_with_cpg(findings: list, target_path: Path, job_id: str = "standalone
                 f"[{job_id}] Taint {rel}:{f.line_start} -> {f.cpg_context.get('cpg_status')} "
                 f"({len(f.cpg_context.get('taint_paths') or [])} flows)"
             )
+        if extra is not None:
+            try:
+                extra(joern_client, project, _relative_to(str(target), root))
+            except (JoernConnectionError, JoernQueryError) as e:
+                failed += 1
+                logger.warning(f"[{job_id}] Extra CPG queries failed: {e}")
     finally:
         joern_client.delete_project(project)
 

@@ -8,10 +8,14 @@ Everything the long-running evaluation writes goes through here, so a crash,
 import json
 import logging
 import os
+import threading
 import time
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Parallel evaluation workers share the status file and the results log.
+_lock = threading.RLock()
 
 # Dataset files must sit under /app/workspace: Joern imports code by path and
 # only that volume is shared between the eval and joern containers.
@@ -38,7 +42,7 @@ def ensure_dirs() -> None:
 def append_jsonl(path: Path, record: dict) -> None:
     """Append one record and force it to disk before returning."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "a", encoding="utf-8") as f:
+    with _lock, open(path, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
         f.flush()
         os.fsync(f.fileno())
@@ -82,10 +86,11 @@ def read_json(path: Path, default=None):
 
 
 def update_status(**fields) -> None:
-    status = read_json(STATUS_PATH, {}) or {}
-    status.update(fields)
-    status["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
-    write_json_atomic(STATUS_PATH, status)
+    with _lock:
+        status = read_json(STATUS_PATH, {}) or {}
+        status.update(fields)
+        status["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        write_json_atomic(STATUS_PATH, status)
 
 
 def load_samples() -> list[dict]:

@@ -24,6 +24,7 @@ from hackersec.analysis.llm.parser import (
 )
 from hackersec.analysis.llm.evidence import check_sanitizer_evidence
 from hackersec.analysis.llm.function_prompter import (
+    MIN_CODE_CHARS,
     build_function_attacker_prompt,
     build_function_defender_prompt,
     build_function_judge_prompt,
@@ -58,6 +59,10 @@ TEMP_JUDGE_VOTE = float(os.getenv("LLM_JUDGE_VOTE_TEMP", "0.7"))
 #             overturned to VULNERABLE (the per-finding rule, for ablation)
 # off      -- not applied
 EVIDENCE_MODE = os.getenv("LLM_EVIDENCE_MODE", "signal").strip().lower()
+# Answer caps for the function-level seats. A capped, unfinished JSON answer
+# is parsed as a failed vote rather than stalling a parallel slot.
+SEAT_MAX_TOKENS = 800
+VOTE_MAX_TOKENS = 500
 
 
 class AdversarialBoard:
@@ -206,14 +211,17 @@ class AdversarialBoard:
         *,
         votes: int | None = None,
         evidence_mode: str | None = None,
+        context: str = "",
     ) -> dict:
         """
-        One debate over a whole function and all of its static findings.
+        One debate over a whole function and all of its candidate findings.
 
         Attacker and Defender argue once; the Judge then votes `votes` times at
         a non-zero temperature with different seeds. `p_vulnerable` is the mean
         of the votes' P(vulnerable), and `prediction` is the majority vote
-        (after the evidence rule, when that is set to override).
+        (after the evidence rule, when that is set to override). `context`
+        (same-file callers and callees) is shown to every seat and takes its
+        room from the code budget.
         """
         votes = votes or JUDGE_VOTES
         mode = (evidence_mode or EVIDENCE_MODE).lower()
@@ -222,23 +230,27 @@ class AdversarialBoard:
 
         num_ctx = getattr(self.client, "num_ctx", 4096)
         code_text, code_truncated = fit_function_code(
-            code, start_line, [f.line_start for f in findings], code_budget(num_ctx)
+            code, start_line, [f.line_start for f in findings],
+            max(MIN_CODE_CHARS, code_budget(num_ctx) - len(context)),
         )
         prompt_tokens = []
 
-        def call(prompt: str, model: str, temperature: float, seed: int = 42) -> dict:
-            res = self.client.generate(prompt, model=model, temperature=temperature, seed=seed)
+        def call(prompt: str, model: str, temperature: float, seed: int = 42, max_tokens: int = SEAT_MAX_TOKENS) -> dict:
+            res = self.client.generate(prompt, model=model, temperature=temperature, seed=seed, max_tokens=max_tokens)
             if res.get("prompt_tokens"):
                 prompt_tokens.append(res["prompt_tokens"])
             return res
 
-        res = call(build_function_attacker_prompt(function_name, code_text, findings), self.model_attacker, TEMP_ATTACKER)
+        res = call(
+            build_function_attacker_prompt(function_name, code_text, findings, context),
+            self.model_attacker, TEMP_ATTACKER,
+        )
         if res["llm_status"] != "success":
             return self._transport_failure(res)
         attacker = parse_function_attacker_response(res["response"])
 
         res = call(
-            build_function_defender_prompt(function_name, code_text, findings, attacker),
+            build_function_defender_prompt(function_name, code_text, findings, attacker, context),
             self.model_defender, TEMP_DEFENDER,
         )
         if res["llm_status"] != "success":
@@ -247,10 +259,10 @@ class AdversarialBoard:
 
         evidence = check_sanitizer_evidence(code, defender.get("sanitization_evidence"))
 
-        judge_prompt = build_function_judge_prompt(function_name, code_text, findings, attacker, defender)
+        judge_prompt = build_function_judge_prompt(function_name, code_text, findings, attacker, defender, context)
         ballots = []
         for i in range(votes):
-            res = call(judge_prompt, self.model_judge, TEMP_JUDGE_VOTE, seed=1000 + i)
+            res = call(judge_prompt, self.model_judge, TEMP_JUDGE_VOTE, seed=1000 + i, max_tokens=VOTE_MAX_TOKENS)
             if res["llm_status"] != "success":
                 return self._transport_failure(res)
             ballots.append(parse_vote_response(res["response"]))

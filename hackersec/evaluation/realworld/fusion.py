@@ -3,10 +3,15 @@ Fusion trained on the dev split with the board's real signals.
 
 The shipped FusionClassifier was fitted on synthetic features, and on the
 first run it reproduced SAST exactly. Here a logistic regression is fitted on
-the dev split's flagged functions (static findings + board outputs -> label)
-and applied unchanged to test. Its decision threshold, and the calibrated
-board threshold, are chosen on dev from cross-validated scores, so neither
-ever sees a test label.
+the dev split's flagged functions (candidate findings + board outputs ->
+label) and applied unchanged to test. Its decision threshold, and the
+calibrated board thresholds, are chosen on dev from cross-validated scores,
+so none of them ever sees a test label.
+
+Two feature sets:
+  board -- the SAST-only debate (Phase 2)
+  full  -- the debate over SAST + LLM-spec taint + auditor candidates, plus
+           which of those sources fired (Phase 3)
 """
 
 import logging
@@ -16,7 +21,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-FEATURES = [
+_BASE = [
     "p_vulnerable",
     "vote_share",
     "attacker_confidence",
@@ -27,6 +32,14 @@ FEATURES = [
     "any_taint",
     "semgrep_share",
 ]
+FEATURES = _BASE
+FULL_FEATURES = _BASE + ["has_sast", "has_llm_taint", "has_auditor", "auditor_confidence"]
+KINDS = {"board": FEATURES, "full": FULL_FEATURES}
+# Record keys for each debate: (findings, board summary, P(vulnerable), vote share).
+_KEYS = {
+    "board": ("findings", "board", "p_vulnerable", "vote_share"),
+    "full": ("full_findings", "full_board", "full_p_vulnerable", "full_vote_share"),
+}
 MIN_TRAIN = 20
 _SEVERITY = {"critical": 1.0, "high": 0.75, "medium": 0.5, "low": 0.25}
 
@@ -38,16 +51,17 @@ def _num(value, default: float) -> float:
         return default
 
 
-def features(record: dict) -> list[float] | None:
-    """Feature vector for a flagged v2 record, or None when it has none."""
-    findings = record.get("findings") or []
-    board = record.get("board")
+def features(record: dict, kind: str = "board") -> list[float] | None:
+    """Feature vector for a record whose `kind` debate ran, else None."""
+    findings_key, board_key, p_key, share_key = _KEYS[kind]
+    findings = record.get(findings_key) or []
+    board = record.get(board_key)
     if not findings or not board:
         return None
     semgrep = sum(1 for f in findings if f.get("tool") == "semgrep")
-    return [
-        _num(record.get("p_vulnerable"), 0.5),
-        _num(record.get("vote_share"), 0.5),
+    x = [
+        _num(record.get(p_key), 0.5),
+        _num(record.get(share_key), 0.5),
         _num(board.get("attacker_confidence"), 0.5),
         _num(board.get("defender_safety"), 0.5),
         1.0 if board.get("evidence_grounded") else 0.0,
@@ -56,6 +70,16 @@ def features(record: dict) -> list[float] | None:
         1.0 if any((f.get("taint_paths") or 0) > 0 for f in findings) else 0.0,
         semgrep / len(findings),
     ]
+    if kind == "full":
+        n = record.get("n_candidates") or {}
+        auditor = (record.get("auditor") or {}).get("candidates") or []
+        x += [
+            1.0 if n.get("sast") else 0.0,
+            1.0 if n.get("taint") else 0.0,
+            1.0 if n.get("auditor") else 0.0,
+            max((_num(c.get("confidence"), 0.0) for c in auditor), default=0.0),
+        ]
+    return x
 
 
 def best_threshold(scores: list[float | None], labels: list[int]) -> float | None:
@@ -76,7 +100,7 @@ def best_threshold(scores: list[float | None], labels: list[int]) -> float | Non
 
 
 class Fusion:
-    def __init__(self, mean, scale, coef, intercept, threshold, n_train, dev_cv_f1=None):
+    def __init__(self, mean, scale, coef, intercept, threshold, n_train, dev_cv_f1=None, kind="board"):
         self.mean = np.asarray(mean, dtype=float)
         self.scale = np.asarray(scale, dtype=float)
         self.coef = np.asarray(coef, dtype=float)
@@ -84,9 +108,10 @@ class Fusion:
         self.threshold = threshold
         self.n_train = n_train
         self.dev_cv_f1 = dev_cv_f1
+        self.kind = kind
 
     def score(self, record: dict) -> float | None:
-        x = features(record)
+        x = features(record, self.kind)
         if x is None:
             return None
         z = (np.asarray(x) - self.mean) / self.scale
@@ -98,7 +123,8 @@ class Fusion:
 
     def to_dict(self) -> dict:
         return {
-            "features": FEATURES,
+            "kind": self.kind,
+            "features": KINDS[self.kind],
             "mean": self.mean.tolist(),
             "scale": self.scale.tolist(),
             "coef": self.coef.tolist(),
@@ -109,7 +135,7 @@ class Fusion:
         }
 
 
-def train(dev_records: list[dict]) -> tuple[Fusion | None, str]:
+def train(dev_records: list[dict], kind: str = "board") -> tuple[Fusion | None, str]:
     """Fit on dev. Returns (model, note); model is None when dev is too small
     or has a single class among flagged functions."""
     from sklearn.linear_model import LogisticRegression
@@ -117,7 +143,7 @@ def train(dev_records: list[dict]) -> tuple[Fusion | None, str]:
     from sklearn.pipeline import make_pipeline
     from sklearn.preprocessing import StandardScaler
 
-    rows = [(features(r), r["label"]) for r in dev_records]
+    rows = [(features(r, kind), r["label"]) for r in dev_records]
     flagged = [(x, y) for x, y in rows if x is not None]
     if len(flagged) < MIN_TRAIN:
         return None, f"only {len(flagged)} flagged dev functions (need {MIN_TRAIN})"
@@ -136,7 +162,7 @@ def train(dev_records: list[dict]) -> tuple[Fusion | None, str]:
     )[:, 1]
 
     # Unflagged dev functions keep a None score, so the threshold trades off
-    # the board's dismissals against the misses SAST already has.
+    # the board's dismissals against the misses the candidates already have.
     it = iter(cv_scores.tolist())
     all_scores = [next(it) if x is not None else None for x, _ in rows]
     all_labels = [y for _, y in rows]
@@ -144,7 +170,8 @@ def train(dev_records: list[dict]) -> tuple[Fusion | None, str]:
 
     model = pipeline().fit(X, y)
     scaler, lr = model[0], model[1]
-    fusion = Fusion(scaler.mean_, scaler.scale_, lr.coef_[0], lr.intercept_[0], threshold, len(flagged))
+    # StandardScaler gives constant features scale 1, so score() never divides by 0.
+    fusion = Fusion(scaler.mean_, scaler.scale_, lr.coef_[0], lr.intercept_[0], threshold, len(flagged), kind=kind)
     tp = sum(1 for s, yy in zip(all_scores, all_labels) if s is not None and threshold is not None and s >= threshold and yy)
     fp = sum(1 for s, yy in zip(all_scores, all_labels) if s is not None and threshold is not None and s >= threshold and not yy)
     fn = sum(all_labels) - tp
@@ -153,7 +180,10 @@ def train(dev_records: list[dict]) -> tuple[Fusion | None, str]:
 
 
 def load(data: dict | None) -> Fusion | None:
-    if not data or data.get("features") != FEATURES:
+    if not data:
+        return None
+    kind = data.get("kind", "board")
+    if data.get("features") != KINDS.get(kind):
         return None
     return Fusion(data["mean"], data["scale"], data["coef"], data["intercept"],
-                  data["threshold"], data["n_train"], data.get("dev_cv_f1"))
+                  data["threshold"], data["n_train"], data.get("dev_cv_f1"), kind=kind)

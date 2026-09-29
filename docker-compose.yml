@@ -1,3 +1,48 @@
+# Shared by the main Ollama and the replicas (./start.sh --replicas N).
+x-ollama: &ollama
+  # Pinned: newer releases give GPU discovery a short watchdog, and on the
+  # loaded DGX it times out and silently serves the model from CPU.
+  image: ollama/ollama:0.9.6
+  restart: unless-stopped
+  # Do not bind 11434 on the DGX host — that port is often already taken by
+  # a system Ollama. Services reach it as http://ollama:11434 on the Compose
+  # network. Replicas share the model files in ollama_data.
+  volumes:
+    - ollama_data:/root/.ollama
+  runtime: nvidia
+  healthcheck:
+    test: [ "CMD-SHELL", "ollama list || exit 1" ]
+    interval: 15s
+    timeout: 10s
+    retries: 15
+    start_period: 60s
+
+x-ollama-env: &ollama-env
+  NVIDIA_DRIVER_CAPABILITIES: compute,utility
+  # Keep weights resident across the board seats to avoid a reload per call
+  OLLAMA_KEEP_ALIVE: 30m
+  OLLAMA_LLM_LIBRARY: cuda_v12
+  OLLAMA_VULKAN: "0"
+  # Must equal the client's OLLAMA_NUM_CTX or every request reloads the
+  # model. The 32k default does not fit next to other users' jobs and splits
+  # the model across CPU and GPU.
+  OLLAMA_CONTEXT_LENGTH: ${OLLAMA_NUM_CTX:-4096}
+  # Concurrent requests per server; VRAM for the KV cache grows with
+  # OLLAMA_NUM_PARALLEL x OLLAMA_NUM_CTX (~0.19 MB per token for 14B).
+  OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
+  OLLAMA_MAX_LOADED_MODELS: "1"
+
+x-joern: &joern
+  image: ghcr.io/joernio/joern:nightly
+  restart: unless-stopped
+  command: [ "joern", "--server", "--server-host", "0.0.0.0", "--server-port", "8080" ]
+  healthcheck:
+    test: [ "CMD-SHELL", "curl -f http://localhost:8080/ || exit 1" ]
+    interval: 15s
+    timeout: 5s
+    retries: 10
+    start_period: 60s
+
 services:
   # ── Redis (Message Broker + Result Backend) ────────────────────────────
   redis:
@@ -15,35 +60,34 @@ services:
 
   # ── Ollama (Local LLM Runtime with GPU) ────────────────────────────────
   ollama:
-    # Pinned: newer releases give GPU discovery a short watchdog, and on the
-    # loaded DGX it times out and silently serves the model from CPU.
-    image: ollama/ollama:0.9.6
-    restart: unless-stopped
-    # Do not bind 11434 on the DGX host — that port is often already taken by
-    # a system Ollama. Backend/worker reach this service as http://ollama:11434
-    # on the Compose network.
-    volumes:
-      - ollama_data:/root/.ollama
-    runtime: nvidia
+    <<: *ollama
     environment:
+      <<: *ollama-env
       # Set by ./start.sh (emptiest GPU, N emptiest, or all).
       # Falls back to every GPU if you run compose without the script.
-      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-      # Keep weights resident across the three board seats to avoid a reload per finding
-      - OLLAMA_KEEP_ALIVE=30m
-      - OLLAMA_LLM_LIBRARY=cuda_v12
-      - OLLAMA_VULKAN=0
-      # Keep equal to OLLAMA_NUM_CTX in .env.docker. The 32k default does not
-      # fit next to other users' jobs and splits the model across CPU and GPU.
-      - OLLAMA_CONTEXT_LENGTH=4096
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
 
-    healthcheck:
-      test: [ "CMD-SHELL", "ollama list || exit 1" ]
-      interval: 15s
-      timeout: 10s
-      retries: 15
-      start_period: 60s
+  # ── Ollama replicas, one per extra GPU (./start.sh --replicas N) ───────
+  ollama-2:
+    <<: *ollama
+    profiles: [ "replicas" ]
+    environment:
+      <<: *ollama-env
+      NVIDIA_VISIBLE_DEVICES: ${OLLAMA_GPU_2:-1}
+
+  ollama-3:
+    <<: *ollama
+    profiles: [ "replicas" ]
+    environment:
+      <<: *ollama-env
+      NVIDIA_VISIBLE_DEVICES: ${OLLAMA_GPU_3:-2}
+
+  ollama-4:
+    <<: *ollama
+    profiles: [ "replicas" ]
+    environment:
+      <<: *ollama-env
+      NVIDIA_VISIBLE_DEVICES: ${OLLAMA_GPU_4:-3}
 
   # ── Ollama Model Puller (one-shot init container) ──────────────────────
   # qwen2.5-coder:14b is ~9 GB on disk / ~11 GB VRAM at 8k context, so all three
@@ -63,21 +107,36 @@ services:
 
   # ── Joern CPG Server ───────────────────────────────────────────────────
   joern:
-    image: ghcr.io/joernio/joern:nightly
-    restart: unless-stopped
+    <<: *joern
     ports:
       - "8080:8080"
-    command: [ "joern", "--server", "--server-host", "0.0.0.0", "--server-port", "8080" ]
     volumes:
       - joern_data:/tmp/joern
       - app_workspace:/app/workspace
     working_dir: /app
-    healthcheck:
-      test: [ "CMD-SHELL", "curl -f http://localhost:8080/ || exit 1" ]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-      start_period: 60s
+
+  # A Joern server holds one active project, so parallel evaluation workers
+  # get a second server. It keeps its CPG workspace out of app_workspace.
+  joern-2:
+    <<: *joern
+    profiles: [ "replicas" ]
+    volumes:
+      - app_workspace:/app/workspace
+    working_dir: /opt/joern-2
+
+  joern-3:
+    <<: *joern
+    profiles: [ "replicas" ]
+    volumes:
+      - app_workspace:/app/workspace
+    working_dir: /opt/joern-3
+
+  joern-4:
+    <<: *joern
+    profiles: [ "replicas" ]
+    volumes:
+      - app_workspace:/app/workspace
+    working_dir: /opt/joern-4
 
   # ── FastAPI Backend ────────────────────────────────────────────────────
   backend:
@@ -87,6 +146,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env.docker
+    environment:
+      - OLLAMA_NUM_CTX=${OLLAMA_NUM_CTX:-4096}
     depends_on:
       redis:
         condition: service_healthy
@@ -107,6 +168,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env.docker
+    environment:
+      - OLLAMA_NUM_CTX=${OLLAMA_NUM_CTX:-4096}
     depends_on:
       redis:
         condition: service_healthy
@@ -134,11 +197,18 @@ services:
       - REALWORLD_DIR=/app/workspace/realworld
       # One directory per run, so a new pipeline version never mixes with
       # (or resumes from) an older run's checkpoints.
-      - REALWORLD_RESULTS_DIR=/app/eval_results/${REALWORLD_RUN:-realworld_v2}
+      - REALWORLD_RESULTS_DIR=/app/eval_results/${REALWORLD_RUN:-realworld_v3}
       - SEMGREP_RULES_DIR=/app/workspace/realworld/semgrep_rules
       - REALWORLD_TARGET_CVEFIXES=${REALWORLD_TARGET_CVEFIXES:-500}
       - REALWORLD_TARGET_VUDENC=${REALWORLD_TARGET_VUDENC:-250}
       - REALWORLD_GIT_COMMIT=${REALWORLD_GIT_COMMIT:-unknown}
+      # Written to .env by ./start.sh; the defaults are one server, one worker.
+      - OLLAMA_NUM_CTX=${OLLAMA_NUM_CTX:-4096}
+      - OLLAMA_BASE_URLS=${OLLAMA_BASE_URLS:-http://ollama:11434}
+      - JOERN_BASE_URLS=${JOERN_BASE_URLS:-http://joern:8080}
+      - REALWORLD_WORKERS=${REALWORLD_WORKERS:-1}
+      # 1 = also run the LLM auditor, LLM-spec taint and the candidates board.
+      - REALWORLD_PHASE3=${REALWORLD_PHASE3:-1}
     depends_on:
       ollama:
         condition: service_started

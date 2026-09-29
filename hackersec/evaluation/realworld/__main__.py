@@ -37,6 +37,8 @@ def _status() -> int:
 
     print(f"phase         : {status.get('phase', 'not started')}  ({status.get('detail') or '-'})")
     print(f"last update   : {status.get('updated_at', '-')}")
+    if status.get("pipeline"):
+        print(f"pipeline      : {status['pipeline']}, {status.get('workers', 1)} workers")
     if status.get("waiting_for"):
         print(f"WAITING FOR   : {status['waiting_for']} — {status.get('waiting_context') or ''} "
               f"({status.get('waited_seconds', 0)}s)")
@@ -67,28 +69,45 @@ def _status() -> int:
 
 
 def _check(wait: int) -> int:
-    """Exit 0 only if every board model generates on GPU at a usable speed
-    and Joern answers queries. Retries for up to `wait` seconds."""
-    from hackersec.analysis.joern.client import JoernClient
-    from hackersec.analysis.llm.client import MODEL_ATTACKER, MODEL_DEFENDER, MODEL_JUDGE, OllamaClient
-    from hackersec.evaluation.realworld.runner import MIN_TOKENS_PER_SEC, REQUIRE_GPU, USE_CPG
+    """Exit 0 only if every board model generates on GPU at a usable speed on
+    every Ollama server, and every Joern server answers queries. Retries for
+    up to `wait` seconds."""
+    from concurrent.futures import ThreadPoolExecutor
 
-    client = OllamaClient()
+    from hackersec.analysis.joern.client import JoernClient
+    from hackersec.analysis.llm.client import MODEL_ATTACKER, MODEL_DEFENDER, MODEL_HUNTER, MODEL_JUDGE, OllamaClient
+    from hackersec.evaluation.realworld.runner import (
+        MIN_TOKENS_PER_SEC, PHASE3, REQUIRE_GPU, USE_CPG, WORKERS, joern_urls, ollama_urls,
+    )
+
+    models = sorted({MODEL_ATTACKER, MODEL_DEFENDER, MODEL_JUDGE} | ({MODEL_HUNTER} if PHASE3 else set()))
+    clients = [OllamaClient(u) for u in ollama_urls()]
+    joerns = [JoernClient(u) for u in joern_urls()] if USE_CPG else []
+    print(f"{WORKERS} workers over {len(clients)} Ollama and {len(joerns)} Joern server(s); "
+          f"phase 3 {'on' if PHASE3 else 'off'}")
+
+    def ollama_health(client):
+        return client, [(m, client.health(m, min_tokens_per_sec=MIN_TOKENS_PER_SEC, require_gpu=REQUIRE_GPU))
+                        for m in models]
+
     deadline = time.time() + wait
     while True:
         problems = []
-        for model in sorted({MODEL_ATTACKER, MODEL_DEFENDER, MODEL_JUDGE}):
-            h = client.health(model, min_tokens_per_sec=MIN_TOKENS_PER_SEC, require_gpu=REQUIRE_GPU)
-            gpu = "?" if h["gpu_fraction"] is None else f"{100 * h['gpu_fraction']:.0f}%"
-            print(f"ollama {model}: {'OK' if h['ok'] else 'NOT OK'}  tokens/s={h['tokens_per_sec']}  on GPU={gpu}"
-                  f"{'  (' + h['reason'] + ')' if h['reason'] else ''}")
-            if not h["ok"]:
-                problems.append(f"{model}: {h['reason']}")
-        if USE_CPG:
-            joern_ok = JoernClient().ready()
-            print(f"joern: {'OK' if joern_ok else 'NOT READY'}")
+        with ThreadPoolExecutor(max_workers=len(clients)) as pool:
+            checked = list(pool.map(ollama_health, clients))
+        for client, results in checked:
+            for model, h in results:
+                gpu = "?" if h["gpu_fraction"] is None else f"{100 * h['gpu_fraction']:.0f}%"
+                print(f"ollama {client.base_url} {model}: {'OK' if h['ok'] else 'NOT OK'}  "
+                      f"tokens/s={h['tokens_per_sec']}  on GPU={gpu}"
+                      f"{'  (' + h['reason'] + ')' if h['reason'] else ''}")
+                if not h["ok"]:
+                    problems.append(f"{client.base_url} {model}: {h['reason']}")
+        for joern in joerns:
+            joern_ok = joern.ready()
+            print(f"joern {joern.base_url}: {'OK' if joern_ok else 'NOT READY'}")
             if not joern_ok:
-                problems.append("joern not ready")
+                problems.append(f"joern {joern.base_url} not ready")
         if not problems:
             return 0
         if time.time() >= deadline:

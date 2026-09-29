@@ -13,6 +13,7 @@ MODEL_ATTACKER = os.getenv("OLLAMA_MODEL_ATTACKER", DEFAULT_MODEL)
 MODEL_DEFENDER = os.getenv("OLLAMA_MODEL_DEFENDER", DEFAULT_MODEL)
 MODEL_JUDGE = os.getenv("OLLAMA_MODEL_JUDGE", DEFAULT_MODEL)
 MODEL_PATCHER = os.getenv("OLLAMA_MODEL_PATCHER", DEFAULT_MODEL)
+MODEL_HUNTER = os.getenv("OLLAMA_MODEL_HUNTER", DEFAULT_MODEL)
 
 _DEFAULT_NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "8192"))
 _TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "300"))
@@ -92,12 +93,13 @@ class OllamaClient:
         json_mode: bool = True,
         num_ctx: int | None = None,
         seed: int | None = 42,
+        max_tokens: int | None = None,
     ) -> dict:
         """
         Invokes Ollama text generation endpoint sequentially.
 
         `json_mode` must be disabled for the patcher, which returns raw source
-        rather than a JSON object.
+        rather than a JSON object. `max_tokens` caps the answer length.
         """
         options = {
             "num_ctx": num_ctx or _DEFAULT_NUM_CTX,
@@ -105,6 +107,8 @@ class OllamaClient:
         }
         if seed is not None:
             options["seed"] = seed
+        if max_tokens:
+            options["num_predict"] = max_tokens
 
         payload = {
             "model": model or DEFAULT_MODEL,

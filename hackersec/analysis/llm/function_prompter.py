@@ -96,25 +96,29 @@ def format_rag(findings: list[Finding]) -> str:
     return _clip("\n".join(rows), MAX_RAG_CHARS) if rows else "No reference definitions retrieved."
 
 
-def _evidence_packet(function_name: str, code_text: str, findings: list[Finding]) -> str:
+def _evidence_packet(function_name: str, code_text: str, findings: list[Finding], context: str = "") -> str:
+    context_block = (
+        f"\n===== SAME-FILE CONTEXT (callers and callees; not under review) =====\n{context}\n" if context else ""
+    )
     return f"""===== FUNCTION UNDER REVIEW: {function_name} =====
 
-===== STATIC ANALYSIS FINDINGS (leads, often false alarms) =====
+===== CANDIDATE FINDINGS (leads, often false alarms) =====
+Sources: semgrep/bandit = static rules, llm_taint = a labelled source reaches a labelled sink, llm_auditor = an LLM's guess.
 "data flow" (Joern) only shows that a parameter or input reaches the flagged line; it does not show whether the value is validated, escaped, or passed as a bound parameter.
 {format_findings(findings)}
 
 ===== REFERENCE DEFINITIONS (OWASP/CWE) =====
 {format_rag(findings)}
-
+{context_block}
 ===== UNTRUSTED SOURCE CODE (line numbers on the left) =====
 [UNTRUSTED_CODE_START]
 {code_text}
 [UNTRUSTED_CODE_END]"""
 
 
-def build_function_attacker_prompt(function_name: str, code_text: str, findings: list[Finding]) -> str:
+def build_function_attacker_prompt(function_name: str, code_text: str, findings: list[Finding], context: str = "") -> str:
     return f"""You are the ATTACKER on an application security review board (Red Team).
-Static analysis flagged the function below. Argue that the function, AS WRITTEN, contains a real, exploitable security vulnerability.
+Automated tools flagged the function below. Argue that the function, AS WRITTEN, contains a real, exploitable security vulnerability.
 
 Rules:
 1. Use the findings as leads. Name the finding id(s) your argument rests on, e.g. ["F1"].
@@ -131,12 +135,14 @@ Rules:
      "exploitability_confidence": 0.0 to 1.0 (float)
    }}
 
-{_evidence_packet(function_name, code_text, findings)}
+{_evidence_packet(function_name, code_text, findings, context)}
 
 Respond with the JSON object only, starting with {{:"""
 
 
-def build_function_defender_prompt(function_name: str, code_text: str, findings: list[Finding], attacker: dict) -> str:
+def build_function_defender_prompt(
+    function_name: str, code_text: str, findings: list[Finding], attacker: dict, context: str = ""
+) -> str:
     return f"""You are the DEFENDER on an application security review board (Blue Team).
 Argue that the function below is NOT exploitable as written, and rebut the Attacker's specific claim.
 
@@ -160,13 +166,13 @@ Rules:
      "safety_confidence": 0.0 to 1.0 (float)
    }}
 
-{_evidence_packet(function_name, code_text, findings)}
+{_evidence_packet(function_name, code_text, findings, context)}
 
 Respond with the JSON object only, starting with {{:"""
 
 
 def build_function_judge_prompt(
-    function_name: str, code_text: str, findings: list[Finding], attacker: dict, defender: dict
+    function_name: str, code_text: str, findings: list[Finding], attacker: dict, defender: dict, context: str = ""
 ) -> str:
     return f"""You are the JUDGE on an application security review board.
 Decide whether the function below, AS WRITTEN, contains an exploitable security vulnerability.
@@ -185,7 +191,7 @@ Self-reported safety: {defender.get("safety_confidence", "unstated")}
 
 Rules:
 1. Decide from the code itself. The arguments are aids; neither side's rhetoric or confidence numbers decide the case.
-2. Static findings are frequently false alarms. A finding only makes the function vulnerable if attacker-controlled input can actually reach the flagged operation without being neutralized.
+2. Candidate findings are frequently false alarms. A finding only makes the function vulnerable if attacker-controlled input can actually reach the flagged operation without being neutralized.
 3. A defence counts only if the neutralizing code is really present in the function shown.
 4. Report calibrated confidence in your verdict: 0.5 means genuinely unsure, 0.9 means you would bet heavily. Do not inflate it.
 5. Use ONLY the reference definitions for the vulnerability class. Never cite a CWE or CVE from memory.
@@ -198,6 +204,6 @@ Rules:
      "reasoning": "Which lines decide it, and why..."
    }}
 
-{_evidence_packet(function_name, code_text, findings)}
+{_evidence_packet(function_name, code_text, findings, context)}
 
 Respond with the JSON object only, starting with {{:"""
