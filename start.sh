@@ -6,10 +6,12 @@
 #   ./start.sh --all         # every GPU on the node (do not do this on a busy DGX)
 #   ./start.sh --gpu 0,3    # pin explicit indices from nvidia-smi
 #
-# Then: docker compose up -d
+# The choice is saved to .env, so later `docker compose` and ./eval.sh calls
+# keep the same GPU instead of falling back to every GPU.
 # Only Ollama is recreated. Backend/frontend images are not rebuilt.
 
 set -euo pipefail
+cd "$(dirname "$0")"
 
 COUNT=1
 EXPLICIT=""
@@ -64,13 +66,21 @@ fi
 export NVIDIA_VISIBLE_DEVICES
 export HACKERSEC_GPU_ID="$NVIDIA_VISIBLE_DEVICES"
 
+touch .env
+if grep -q '^NVIDIA_VISIBLE_DEVICES=' .env; then
+  sed -i "s/^NVIDIA_VISIBLE_DEVICES=.*/NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES}/" .env
+else
+  echo "NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES}" >> .env
+fi
+
 echo ""
-echo "Ollama will use NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES}"
+echo "Ollama will use NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES} (saved to .env)"
 echo "Recreating the Ollama container (no image rebuild)..."
 
 docker compose up -d --force-recreate ollama
 docker compose up -d
 
 echo ""
-echo "Done. Confirm inside the container:"
+echo "Done. Confirm the model runs on GPU:"
+echo "  ./eval.sh check        # tokens/s and share of the model on GPU"
 echo "  docker compose exec ollama nvidia-smi -L"

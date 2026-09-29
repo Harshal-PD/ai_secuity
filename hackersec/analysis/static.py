@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import os
@@ -41,6 +42,54 @@ SEMGREP_CONFIGS = [
 ]
 
 
+# Semgrep spawns one worker per visible core by default (80 on the DGX).
+SEMGREP_JOBS = int(os.getenv("SEMGREP_JOBS", "2"))
+MERGED_RULES_NAME = "_merged.yaml"
+
+
+def _load_rules(path: Path) -> list[dict]:
+    text = path.read_text(encoding="utf-8")
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        import yaml
+
+        data = yaml.safe_load(text)
+    return list((data or {}).get("rules") or [])
+
+
+def _merged_rules(rules_dir: Path) -> Path | None:
+    """
+    One config holding every vendored rule once.
+
+    The packs overlap heavily (p/security-audit and p/owasp-top-ten share most
+    Python rules), and Semgrep parses every config on every run, so merging
+    removes both the duplicate work and duplicate findings. The merged file
+    uses a different suffix so it is never picked up as a pack itself.
+    """
+    packs = sorted(rules_dir.glob("*.yml"))
+    if not packs:
+        return None
+    merged = rules_dir / MERGED_RULES_NAME
+    if merged.exists() and merged.stat().st_mtime >= max(p.stat().st_mtime for p in packs):
+        return merged
+    try:
+        rules: dict[str, dict] = {}
+        total = 0
+        for p in packs:
+            for rule in _load_rules(p):
+                total += 1
+                rules.setdefault(rule.get("id") or f"anon-{total}", rule)
+        tmp = merged.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"rules": list(rules.values())}), encoding="utf-8")
+        os.replace(tmp, merged)
+        logger.info(f"Merged {total} vendored Semgrep rules into {len(rules)} unique rules")
+        return merged
+    except Exception as e:
+        logger.warning(f"Could not merge vendored Semgrep packs ({e}); scanning them separately")
+        return None
+
+
 def _semgrep_configs() -> list[str]:
     """
     Registry packs are downloaded from semgrep.dev on every scan, so a dropped
@@ -49,6 +98,9 @@ def _semgrep_configs() -> list[str]:
     """
     rules_dir = os.getenv("SEMGREP_RULES_DIR")
     if rules_dir:
+        merged = _merged_rules(Path(rules_dir))
+        if merged:
+            return [str(merged)]
         local = sorted(Path(rules_dir).glob("*.yml"))
         if local:
             return [str(p) for p in local]
@@ -56,43 +108,88 @@ def _semgrep_configs() -> list[str]:
     return SEMGREP_CONFIGS
 
 
-def run_semgrep(target_path: Path, job_id: str) -> list[Finding]:
-    """Run Semgrep with security rule sets. Returns normalized Finding list."""
-    cmd = ["semgrep", "scan", "--json", "--timeout", "60", "--metrics=off"]
+def rules_signature() -> str:
+    """Identifies the exact rule set, so cached scan results are reused only
+    while the rules are unchanged."""
+    h = hashlib.sha1()
+    for cfg in _semgrep_configs():
+        p = Path(cfg)
+        h.update(p.read_bytes() if p.is_file() else cfg.encode())
+    return h.hexdigest()[:16]
+
+
+def _rule_id(check_id: str) -> str:
+    """Semgrep prefixes local rules with their directory path
+    (`workspace.realworld.semgrep_rules.python...`); keep the registry id."""
+    rules_dir = os.getenv("SEMGREP_RULES_DIR")
+    if rules_dir:
+        marker = Path(rules_dir).name + "."
+        idx = check_id.find(marker)
+        if idx != -1:
+            return check_id[idx + len(marker):]
+    return check_id
+
+
+def _run_semgrep_cmd(targets: list[Path], job_id: str) -> dict | None:
+    cmd = ["semgrep", "scan", "--json", "--timeout", "60", "--metrics=off", "--jobs", str(SEMGREP_JOBS)]
     for cfg in _semgrep_configs():
         cmd += ["--config", cfg]
-    cmd.append(str(target_path))
+    cmd += [str(t) for t in targets]
+    timeout = 120 + 30 * max(0, len(targets) - 1)
 
-    logger.info(f"[{job_id}] Running Semgrep: {' '.join(cmd)}")
+    logger.info(f"[{job_id}] Running Semgrep on {len(targets)} target(s): {' '.join(cmd[:12])} ...")
 
     try:
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=timeout,
             errors="replace",
             env={**os.environ, "SEMGREP_ENABLE_VERSION_CHECK": "0"},
         )
     except subprocess.TimeoutExpired:
-        logger.warning(f"[{job_id}] Semgrep timed out after 120s")
-        return []
+        logger.warning(f"[{job_id}] Semgrep timed out after {timeout}s")
+        return None
     except FileNotFoundError:
         logger.error(f"[{job_id}] Semgrep binary not found in container")
-        return []
+        return None
 
     # Exit code 0 = no findings, 1 = findings found, 2+ = error
     if result.returncode >= 2:
         logger.error(f"[{job_id}] Semgrep exited with code {result.returncode}")
         logger.error(f"[{job_id}] Semgrep stderr: {result.stderr[:500]}")
-        return []
+        return None
 
     try:
-        data = json.loads(result.stdout)
+        return json.loads(result.stdout)
     except json.JSONDecodeError:
         logger.error(f"[{job_id}] Semgrep produced invalid JSON. stdout[:200]: {result.stdout[:200]}")
-        return []
+        return None
 
+
+def run_semgrep(target_path: Path, job_id: str) -> list[Finding]:
+    """Run Semgrep with security rule sets. Returns normalized Finding list."""
+    data = _run_semgrep_cmd([target_path], job_id)
+    return _semgrep_findings(data, job_id) if data else []
+
+
+def run_semgrep_batch(paths: list[Path], job_id: str) -> dict[str, list[Finding]] | None:
+    """
+    Scan many files in one Semgrep process, so the rules are parsed once.
+    Returns {resolved path: findings}, or None if the batch failed and the
+    caller should fall back to scanning files one by one.
+    """
+    data = _run_semgrep_cmd(paths, job_id)
+    if data is None:
+        return None
+    out: dict[str, list[Finding]] = {str(Path(p).resolve()): [] for p in paths}
+    for f in _semgrep_findings(data, job_id):
+        out.setdefault(str(Path(f.file_path).resolve()), []).append(f)
+    return out
+
+
+def _semgrep_findings(data: dict, job_id: str) -> list[Finding]:
     findings = []
     for r in data.get("results", []):
         severity_raw = r.get("extra", {}).get("severity", "INFO")
@@ -117,7 +214,7 @@ def run_semgrep(target_path: Path, job_id: str) -> list[Finding]:
             file_path=r["path"],
             line_start=r["start"]["line"],
             line_end=r["end"]["line"],
-            rule_id=r["check_id"],
+            rule_id=_rule_id(r["check_id"]),
             tool="semgrep",
             severity=severity,
             message=r["extra"]["message"],
@@ -131,6 +228,36 @@ def run_semgrep(target_path: Path, job_id: str) -> list[Finding]:
 
 # ─── Bandit ─────────────────────────────────────────────────────────────────
 
+def _run_bandit_cmd(targets: list[Path], job_id: str, recursive: bool = False) -> dict | None:
+    cmd = ["bandit"] + (["-r"] if recursive else []) + [str(t) for t in targets] + ["-f", "json", "-l"]  # -l = low + medium + high
+    timeout = 60 + 5 * max(0, len(targets) - 1)
+
+    logger.info(f"[{job_id}] Running Bandit on {len(targets)} target(s)")
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            errors="replace",
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning(f"[{job_id}] Bandit timed out after {timeout}s")
+        return None
+    except FileNotFoundError:
+        logger.error(f"[{job_id}] Bandit binary not found in container")
+        return None
+
+    logger.info(f"[{job_id}] Bandit exit code: {result.returncode}")
+
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError:
+        logger.error(f"[{job_id}] Bandit produced invalid JSON. stderr: {result.stderr[:200]}")
+        return None
+
+
 def run_bandit(target_path: Path, job_id: str) -> list[Finding]:
     """Run Bandit on Python files. Returns normalized Finding list."""
     # Bandit only works on Python — skip non-Python targets
@@ -138,37 +265,24 @@ def run_bandit(target_path: Path, job_id: str) -> list[Finding]:
         logger.info(f"[{job_id}] Skipping Bandit (not a .py file)")
         return []
 
-    cmd = [
-        "bandit", "-r" if target_path.is_dir() else "",
-        str(target_path), "-f", "json", "-l",  # -l = low + medium + high
-    ]
-    cmd = [c for c in cmd if c]  # Remove empty strings
+    data = _run_bandit_cmd([target_path], job_id, recursive=target_path.is_dir())
+    findings = _bandit_findings(data, job_id) if data else []
+    logger.info(f"[{job_id}] Bandit found {len(findings)} findings")
+    return findings
 
-    logger.info(f"[{job_id}] Running Bandit: {' '.join(cmd)}")
 
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=60,
-            errors="replace",
-        )
-    except subprocess.TimeoutExpired:
-        logger.warning(f"[{job_id}] Bandit timed out after 60s")
-        return []
-    except FileNotFoundError:
-        logger.error(f"[{job_id}] Bandit binary not found in container")
-        return []
+def run_bandit_batch(paths: list[Path], job_id: str) -> dict[str, list[Finding]] | None:
+    """Scan many .py files in one Bandit process. None means fall back per file."""
+    data = _run_bandit_cmd(paths, job_id)
+    if data is None:
+        return None
+    out: dict[str, list[Finding]] = {str(Path(p).resolve()): [] for p in paths}
+    for f in _bandit_findings(data, job_id):
+        out.setdefault(str(Path(f.file_path).resolve()), []).append(f)
+    return out
 
-    logger.info(f"[{job_id}] Bandit exit code: {result.returncode}")
 
-    try:
-        data = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        logger.error(f"[{job_id}] Bandit produced invalid JSON. stderr: {result.stderr[:200]}")
-        return []
-
+def _bandit_findings(data: dict, job_id: str) -> list[Finding]:
     findings = []
     for r in data.get("results", []):
         severity_raw = r.get("issue_severity", "LOW")
@@ -196,7 +310,6 @@ def run_bandit(target_path: Path, job_id: str) -> list[Finding]:
             code_snippet=snippet,
         ))
 
-    logger.info(f"[{job_id}] Bandit found {len(findings)} findings")
     return findings
 
 

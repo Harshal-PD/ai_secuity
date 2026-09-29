@@ -22,5 +22,5 @@ done
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 $M report
 
 # Idle instead of exiting: with restart=unless-stopped an exit would loop.
-echo "[entrypoint] evaluation complete; report in eval_results/realworld/"
+echo "[entrypoint] evaluation complete; report in ${REALWORLD_RESULTS_DIR:-eval_results/realworld}/"
 exec sleep infinity

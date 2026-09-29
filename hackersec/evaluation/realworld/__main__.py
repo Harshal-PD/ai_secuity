@@ -3,12 +3,14 @@
     python -m hackersec.evaluation.realworld run      # phase 2: offline pipeline
     python -m hackersec.evaluation.realworld report   # any time, even mid-run
     python -m hackersec.evaluation.realworld status
+    python -m hackersec.evaluation.realworld check    # is Ollama on GPU and Joern up?
 """
 
 import argparse
 import json
 import logging
 import sys
+import time
 
 from hackersec.evaluation.realworld import state
 
@@ -49,7 +51,51 @@ def _status() -> int:
     print(f"evaluated     : {done}/{len(samples)} ({pct})  " + "  ".join(f"{k}={v}" for k, v in sorted(counts.items())))
     if status.get("eta_hours") is not None:
         print(f"speed / ETA   : {status.get('sec_per_sample')} s per sample, ~{status['eta_hours']} h remaining")
+    if status.get("llm_tokens_per_sec") is not None:
+        gpu = status.get("llm_gpu_fraction")
+        print(f"LLM health    : {status['llm_tokens_per_sec']} tokens/s, "
+              f"{'?' if gpu is None else f'{100 * gpu:.0f}%'} of the model on GPU")
+    if status.get("sast_prescan"):
+        print(f"SAST prescan  : {status['sast_prescan']}")
+    splits = {}
+    for r in results.values():
+        if r.get("split"):
+            splits[r["split"]] = splits.get(r["split"], 0) + 1
+    if splits:
+        print("by split      : " + "  ".join(f"{k}={v}" for k, v in sorted(splits.items())))
     return 0
+
+
+def _check(wait: int) -> int:
+    """Exit 0 only if every board model generates on GPU at a usable speed
+    and Joern answers queries. Retries for up to `wait` seconds."""
+    from hackersec.analysis.joern.client import JoernClient
+    from hackersec.analysis.llm.client import MODEL_ATTACKER, MODEL_DEFENDER, MODEL_JUDGE, OllamaClient
+    from hackersec.evaluation.realworld.runner import MIN_TOKENS_PER_SEC, REQUIRE_GPU, USE_CPG
+
+    client = OllamaClient()
+    deadline = time.time() + wait
+    while True:
+        problems = []
+        for model in sorted({MODEL_ATTACKER, MODEL_DEFENDER, MODEL_JUDGE}):
+            h = client.health(model, min_tokens_per_sec=MIN_TOKENS_PER_SEC, require_gpu=REQUIRE_GPU)
+            gpu = "?" if h["gpu_fraction"] is None else f"{100 * h['gpu_fraction']:.0f}%"
+            print(f"ollama {model}: {'OK' if h['ok'] else 'NOT OK'}  tokens/s={h['tokens_per_sec']}  on GPU={gpu}"
+                  f"{'  (' + h['reason'] + ')' if h['reason'] else ''}")
+            if not h["ok"]:
+                problems.append(f"{model}: {h['reason']}")
+        if USE_CPG:
+            joern_ok = JoernClient().ready()
+            print(f"joern: {'OK' if joern_ok else 'NOT READY'}")
+            if not joern_ok:
+                problems.append("joern not ready")
+        if not problems:
+            return 0
+        if time.time() >= deadline:
+            print("CHECK FAILED: " + "; ".join(problems))
+            return 1
+        print(f"retrying in 20s (up to {int(deadline - time.time())}s more)")
+        time.sleep(20)
 
 
 def main() -> int:
@@ -67,10 +113,14 @@ def main() -> int:
 
     sub.add_parser("report", help="write report_latest.{json,md} from the checkpoints")
     sub.add_parser("status", help="print progress")
+    c = sub.add_parser("check", help="verify Ollama runs on GPU at a usable speed and Joern is up")
+    c.add_argument("--wait", type=int, default=0, help="keep retrying for this many seconds")
     args = parser.parse_args()
 
     if args.cmd == "status":
         return _status()
+    if args.cmd == "check":
+        return _check(args.wait)
 
     _logging()
     if args.cmd == "build":

@@ -126,6 +126,71 @@ def parse_defender_response(raw_text: str) -> dict:
     }
 
 
+def _finding_ids(value) -> list[str]:
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, list):
+        return []
+    return [str(v).strip() for v in value if str(v).strip()][:10]
+
+
+def parse_function_attacker_response(raw_text: str) -> dict:
+    """Red Team submission for a whole function. Never raises."""
+    data = _extract_json(raw_text)
+    if data is None:
+        return {
+            "status": "failed_parsing",
+            "finding_ids": [],
+            "vulnerability": "Attacker submission unparseable.",
+            "exploit_path": "unknown",
+            "preconditions": "unknown",
+            "exploitability_confidence": 0.0,
+        }
+    return {
+        "status": "success",
+        "finding_ids": _finding_ids(data.get("finding_ids")),
+        "vulnerability": str(data.get("vulnerability", "None stated.")),
+        "exploit_path": str(data.get("exploit_path", "No exploit path submitted.")),
+        "preconditions": str(data.get("preconditions", "None stated.")),
+        "exploitability_confidence": _bounded_float(data.get("exploitability_confidence", 0.0)),
+    }
+
+
+def parse_vote_response(raw_text: str) -> dict:
+    """
+    One Judge vote on a whole function.
+
+    `p_vulnerable` converts the Judge's certainty in its own verdict into a
+    probability that the function is vulnerable. An unparseable vote is
+    returned with status failed_parsing and no probability, so it can be
+    excluded from the tally instead of silently counting either way.
+    """
+    data = _extract_json(raw_text)
+    if data is None:
+        return {"status": "failed_parsing", "verdict": None, "confidence": None, "p_vulnerable": None,
+                "finding_ids": [], "reasoning": ""}
+
+    raw = str(data.get("verdict", "")).strip().upper().replace(" ", "_").replace("-", "_")
+    if any(k in raw for k in ("NOT", "SAFE", "FALSE", "BENIGN")):
+        verdict = "NOT_VULNERABLE"
+    elif any(k in raw for k in ("VULN", "TRUE", "EXPLOIT")):
+        verdict = "VULNERABLE"
+    else:
+        return {"status": "failed_parsing", "verdict": None, "confidence": None, "p_vulnerable": None,
+                "finding_ids": [], "reasoning": str(data.get("reasoning", ""))[:400]}
+
+    confidence = _bounded_float(data.get("confidence", 0.5), default=0.5)
+    p_vuln = confidence if verdict == "VULNERABLE" else 1.0 - confidence
+    return {
+        "status": "success",
+        "verdict": verdict,
+        "confidence": confidence,
+        "p_vulnerable": round(p_vuln, 4),
+        "finding_ids": _finding_ids(data.get("finding_ids")),
+        "reasoning": str(data.get("reasoning", ""))[:600],
+    }
+
+
 def parse_judge_response(raw_text: str) -> dict:
     """
     Normalizes the arbitration result.

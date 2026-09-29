@@ -17,10 +17,19 @@ from hackersec.analysis.llm.prompter import (
 from hackersec.analysis.llm.parser import (
     parse_attacker_response,
     parse_defender_response,
+    parse_function_attacker_response,
     parse_judge_response,
     parse_llm_response,
+    parse_vote_response,
 )
 from hackersec.analysis.llm.evidence import check_sanitizer_evidence
+from hackersec.analysis.llm.function_prompter import (
+    build_function_attacker_prompt,
+    build_function_defender_prompt,
+    build_function_judge_prompt,
+    code_budget,
+    fit_function_code,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +47,17 @@ TEMP_JUDGE = float(os.getenv("LLM_TEMP_JUDGE", "0.0"))
 
 # Confidence floor applied when the evidence rule overturns a FALSE_POSITIVE.
 OVERRIDE_CONFIDENCE_FLOOR = 0.5
+
+# Function-level review: the Judge is sampled several times and the share of
+# VULNERABLE votes is the board's score (self-consistency, Wang et al. 2023),
+# which is better calibrated than one self-reported confidence.
+JUDGE_VOTES = int(os.getenv("LLM_JUDGE_VOTES", "5"))
+TEMP_JUDGE_VOTE = float(os.getenv("LLM_JUDGE_VOTE_TEMP", "0.7"))
+# signal   -- the evidence check is recorded as a feature, never flips a vote
+# override -- a SAFE majority whose sanitizer quote is not in the code is
+#             overturned to VULNERABLE (the per-finding rule, for ablation)
+# off      -- not applied
+EVIDENCE_MODE = os.getenv("LLM_EVIDENCE_MODE", "signal").strip().lower()
 
 
 class AdversarialBoard:
@@ -172,6 +192,104 @@ class AdversarialBoard:
                     "defender": self.model_defender,
                     "judge": self.model_judge,
                 },
+            },
+        }
+
+    # ── Function-level review ───────────────────────────────────────────────
+
+    def deliberate_function(
+        self,
+        function_name: str,
+        code: str,
+        start_line: int,
+        findings: list[Finding],
+        *,
+        votes: int | None = None,
+        evidence_mode: str | None = None,
+    ) -> dict:
+        """
+        One debate over a whole function and all of its static findings.
+
+        Attacker and Defender argue once; the Judge then votes `votes` times at
+        a non-zero temperature with different seeds. `p_vulnerable` is the mean
+        of the votes' P(vulnerable), and `prediction` is the majority vote
+        (after the evidence rule, when that is set to override).
+        """
+        votes = votes or JUDGE_VOTES
+        mode = (evidence_mode or EVIDENCE_MODE).lower()
+        if mode not in ("signal", "override", "off"):
+            raise ValueError(f"evidence_mode must be signal, override or off, got {mode!r}")
+
+        num_ctx = getattr(self.client, "num_ctx", 4096)
+        code_text, code_truncated = fit_function_code(
+            code, start_line, [f.line_start for f in findings], code_budget(num_ctx)
+        )
+        prompt_tokens = []
+
+        def call(prompt: str, model: str, temperature: float, seed: int = 42) -> dict:
+            res = self.client.generate(prompt, model=model, temperature=temperature, seed=seed)
+            if res.get("prompt_tokens"):
+                prompt_tokens.append(res["prompt_tokens"])
+            return res
+
+        res = call(build_function_attacker_prompt(function_name, code_text, findings), self.model_attacker, TEMP_ATTACKER)
+        if res["llm_status"] != "success":
+            return self._transport_failure(res)
+        attacker = parse_function_attacker_response(res["response"])
+
+        res = call(
+            build_function_defender_prompt(function_name, code_text, findings, attacker),
+            self.model_defender, TEMP_DEFENDER,
+        )
+        if res["llm_status"] != "success":
+            return self._transport_failure(res)
+        defender = parse_defender_response(res["response"])
+
+        evidence = check_sanitizer_evidence(code, defender.get("sanitization_evidence"))
+
+        judge_prompt = build_function_judge_prompt(function_name, code_text, findings, attacker, defender)
+        ballots = []
+        for i in range(votes):
+            res = call(judge_prompt, self.model_judge, TEMP_JUDGE_VOTE, seed=1000 + i)
+            if res["llm_status"] != "success":
+                return self._transport_failure(res)
+            ballots.append(parse_vote_response(res["response"]))
+
+        valid = [b for b in ballots if b["status"] == "success"]
+        if valid:
+            vote_share = sum(b["verdict"] == "VULNERABLE" for b in valid) / len(valid)
+            p_vuln = sum(b["p_vulnerable"] for b in valid) / len(valid)
+            prediction = int(vote_share >= 0.5)
+            verdict_source = "judge_votes"
+        else:
+            # No readable vote: keep the static finding rather than dismiss it.
+            vote_share, p_vuln, prediction, verdict_source = None, None, 1, "unparseable_votes"
+
+        if mode == "override" and prediction == 0 and not evidence["grounded"]:
+            prediction, verdict_source = 1, "evidence_rule"
+
+        max_prompt = max(prompt_tokens) if prompt_tokens else None
+        return {
+            "llm_status": "success",
+            "mode": "function_board",
+            "prediction": prediction,
+            "vote_share": None if vote_share is None else round(vote_share, 4),
+            "p_vulnerable": None if p_vuln is None else round(p_vuln, 4),
+            "votes": ballots,
+            "valid_votes": len(valid),
+            "attacker": attacker,
+            "defender": defender,
+            "evidence_check": evidence,
+            "evidence_mode": mode,
+            "verdict_source": verdict_source,
+            "code_truncated": code_truncated,
+            "max_prompt_tokens": max_prompt,
+            # Ollama keeps only the last num_ctx tokens of an oversized prompt.
+            "context_overflow": bool(max_prompt and max_prompt >= num_ctx - 8),
+            "models": {
+                "attacker": self.model_attacker,
+                "defender": self.model_defender,
+                "judge": self.model_judge,
             },
         }
 

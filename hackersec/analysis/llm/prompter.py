@@ -14,6 +14,22 @@ def _format_rag(finding: Finding) -> str:
     )
 
 
+def _format_flow(path) -> str:
+    """Render one taint path as `line 3 `a` -> line 7 `b``."""
+    if not isinstance(path, list):
+        return str(path)[:300]
+    steps, last = [], None
+    for node in path:
+        if not isinstance(node, dict):
+            steps.append(str(node)[:60])
+            continue
+        step = (node.get("line"), str(node.get("code", ""))[:60])
+        if step != last:
+            steps.append(f"line {step[0]} `{step[1]}`")
+        last = step
+    return " -> ".join(steps)[:400]
+
+
 def _format_cpg(finding: Finding) -> str:
     if not finding.cpg_context:
         return "No flow available."
@@ -22,7 +38,7 @@ def _format_cpg(finding: Finding) -> str:
     flows = finding.cpg_context.get("taint_paths", [])
     if not flows:
         return "No flow available."
-    return "\n".join(f"Flow {i}: {path}" for i, path in enumerate(flows[:3]))
+    return "\n".join(f"Flow {i}: {_format_flow(path)}" for i, path in enumerate(flows[:3]))
 
 
 def _evidence_block(finding: Finding) -> str:
