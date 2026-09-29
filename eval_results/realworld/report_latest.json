@@ -1,0 +1,8028 @@
+{
+  "generated_at": "2026-09-28T07:32:11",
+  "coverage": {
+    "samples_total": 1500,
+    "evaluated_ok": 1498,
+    "llm_failed": 2,
+    "errors": 0,
+    "pending": 0,
+    "percent_done": 100.0,
+    "complete": true
+  },
+  "build": {
+    "cvefixes": {
+      "pairs": 500,
+      "commits_used": 282,
+      "per_cwe": {
+        "CWE-94": 12,
+        "CWE-212": 3,
+        "CWE-74": 12,
+        "CWE-19": 3,
+        "CWE-835": 2,
+        "CWE-116": 4,
+        "CWE-693": 3,
+        "CWE-362": 6,
+        "CWE-29": 10,
+        "CWE-307": 2,
+        "CWE-254": 3,
+        "CWE-347": 2,
+        "CWE-295": 7,
+        "CWE-1236": 2,
+        "CWE-269": 10,
+        "CWE-1284": 1,
+        "CWE-93": 4,
+        "CWE-311": 2,
+        "CWE-670": 4,
+        "CWE-918": 22,
+        "CWE-203": 17,
+        "CWE-755": 1,
+        "CWE-502": 13,
+        "CWE-359": 2,
+        "CWE-346": 1,
+        "CWE-521": 3,
+        "CWE-290": 4,
+        "CWE-352": 9,
+        "CWE-215": 2,
+        "CWE-134": 3,
+        "CWE-707": 1,
+        "CWE-532": 10,
+        "CWE-252": 2,
+        "CWE-776": 3,
+        "CWE-611": 6,
+        "CWE-255": 2,
+        "CWE-319": 2,
+        "CWE-78": 11,
+        "CWE-601": 16,
+        "CWE-921": 2,
+        "CWE-22": 17,
+        "CWE-789": 4,
+        "CWE-172": 1,
+        "CWE-377": 1,
+        "CWE-427": 1,
+        "CWE-787": 6,
+        "CWE-674": 7,
+        "CWE-284": 4,
+        "CWE-23": 2,
+        "CWE-862": 2,
+        "CWE-unknown": 11,
+        "CWE-89": 11,
+        "CWE-331": 5,
+        "CWE-522": 1,
+        "CWE-366": 2,
+        "CWE-310": 5,
+        "CWE-73": 4,
+        "CWE-59": 15,
+        "CWE-77": 15,
+        "CWE-444": 2,
+        "CWE-285": 2,
+        "CWE-667": 2,
+        "CWE-732": 1,
+        "CWE-209": 7,
+        "CWE-20": 18,
+        "CWE-697": 4,
+        "CWE-367": 3,
+        "CWE-640": 2,
+        "CWE-327": 2,
+        "CWE-1336": 1,
+        "CWE-1021": 6,
+        "CWE-312": 5,
+        "CWE-330": 3,
+        "CWE-668": 5,
+        "CWE-200": 10,
+        "CWE-863": 13,
+        "CWE-287": 8,
+        "CWE-264": 11,
+        "CWE-400": 12,
+        "CWE-434": 2,
+        "CWE-79": 9,
+        "CWE-36": 2,
+        "CWE-354": 3,
+        "CWE-306": 5,
+        "CWE-120": 2,
+        "CWE-613": 2,
+        "CWE-416": 2,
+        "CWE-770": 11,
+        "CWE-1333": 7
+      },
+      "drops": {
+        "test_file": 435,
+        "no_function_changed": 124,
+        "function_added_or_removed": 46,
+        "function_size": 18,
+        "tangled_commit": 51,
+        "whitespace_only": 19,
+        "packaging_file": 21,
+        "no_eligible_files": 74,
+        "syntax_error": 43,
+        "file_added_or_deleted": 24,
+        "test_or_docs_dir": 51,
+        "commit_unavailable": 3,
+        "file_unavailable": 1
+      },
+      "exhausted": false,
+      "target": 500,
+      "commits_total": 829
+    },
+    "vudenc": {
+      "pairs": 250,
+      "commits_used": 147,
+      "per_cwe": {
+        "CWE-79": 21,
+        "CWE-352": 41,
+        "CWE-78": 46,
+        "CWE-22": 27,
+        "CWE-94": 41,
+        "CWE-89": 42,
+        "CWE-601": 32
+      },
+      "drops": {
+        "tangled_commit": 59,
+        "test_file": 51,
+        "no_eligible_files": 14,
+        "commit_unavailable": 47,
+        "no_function_changed": 57,
+        "syntax_error": 85,
+        "test_or_docs_dir": 40,
+        "function_added_or_removed": 27,
+        "file_added_or_deleted": 11,
+        "packaging_file": 1,
+        "function_size": 6,
+        "whitespace_only": 7
+      },
+      "exhausted": false,
+      "target": 250,
+      "commits_total": 1007
+    }
+  },
+  "datasets": {
+    "cvefixes": {
+      "samples": 999,
+      "pairs": 500,
+      "end_to_end": {
+        "sast": {
+          "n": 999,
+          "tp": 110,
+          "fp": 82,
+          "tn": 418,
+          "fn": 389,
+          "precision": 0.5729,
+          "recall": 0.2204,
+          "f1": 0.3184,
+          "fpr": 0.164,
+          "accuracy": 0.5285
+        },
+        "board": {
+          "n": 999,
+          "tp": 109,
+          "fp": 78,
+          "tn": 422,
+          "fn": 390,
+          "precision": 0.5829,
+          "recall": 0.2184,
+          "f1": 0.3178,
+          "fpr": 0.156,
+          "accuracy": 0.5315
+        },
+        "fusion": {
+          "n": 999,
+          "tp": 110,
+          "fp": 82,
+          "tn": 418,
+          "fn": 389,
+          "precision": 0.5729,
+          "recall": 0.2204,
+          "f1": 0.3184,
+          "fpr": 0.164,
+          "accuracy": 0.5285
+        }
+      },
+      "sast_flagged": {
+        "n": 192,
+        "vulnerable": 110,
+        "fixed": 82,
+        "sast": {
+          "n": 192,
+          "tp": 110,
+          "fp": 82,
+          "tn": 0,
+          "fn": 0,
+          "precision": 0.5729,
+          "recall": 1.0,
+          "f1": 0.7285,
+          "fpr": 1.0,
+          "accuracy": 0.5729
+        },
+        "board": {
+          "n": 192,
+          "tp": 109,
+          "fp": 78,
+          "tn": 4,
+          "fn": 1,
+          "precision": 0.5829,
+          "recall": 0.9909,
+          "f1": 0.734,
+          "fpr": 0.9512,
+          "accuracy": 0.5885
+        },
+        "fusion": {
+          "n": 192,
+          "tp": 110,
+          "fp": 82,
+          "tn": 0,
+          "fn": 0,
+          "precision": 0.5729,
+          "recall": 1.0,
+          "f1": 0.7285,
+          "fpr": 1.0,
+          "accuracy": 0.5729
+        },
+        "board_false_positives_removed": 0.0488,
+        "board_true_positives_kept": 0.9909,
+        "fusion_false_positives_removed": 0.0,
+        "fusion_true_positives_kept": 1.0
+      },
+      "pairwise": {
+        "sast": {
+          "pairs": 499,
+          "P-C": 32,
+          "P-V": 78,
+          "P-B": 385,
+          "P-R": 4,
+          "P-C_rate": 0.0641,
+          "P-V_rate": 0.1563,
+          "P-B_rate": 0.7715,
+          "P-R_rate": 0.008
+        },
+        "board": {
+          "pairs": 499,
+          "P-C": 35,
+          "P-V": 74,
+          "P-B": 386,
+          "P-R": 4,
+          "P-C_rate": 0.0701,
+          "P-V_rate": 0.1483,
+          "P-B_rate": 0.7735,
+          "P-R_rate": 0.008
+        },
+        "fusion": {
+          "pairs": 499,
+          "P-C": 32,
+          "P-V": 78,
+          "P-B": 385,
+          "P-R": 4,
+          "P-C_rate": 0.0641,
+          "P-V_rate": 0.1563,
+          "P-B_rate": 0.7715,
+          "P-R_rate": 0.008
+        }
+      },
+      "board_telemetry": {
+        "findings": 338,
+        "cpg_success_rate": 1.0,
+        "cpg_taint_found_rate": 0.0,
+        "rag_context_rate": 1.0,
+        "judge_false_positive_rate": 0.0799,
+        "evidence_grounded_rate": 0.1361,
+        "evidence_rule_override_rate": 0.0414,
+        "by_tool": {
+          "bandit": 234,
+          "semgrep": 104
+        }
+      },
+      "per_cwe": {
+        "CWE-918": {
+          "samples": 44,
+          "flagged": 8,
+          "sast": {
+            "n": 44,
+            "tp": 4,
+            "fp": 4,
+            "tn": 18,
+            "fn": 18,
+            "precision": 0.5,
+            "recall": 0.1818,
+            "f1": 0.2667,
+            "fpr": 0.1818,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 44,
+            "tp": 4,
+            "fp": 4,
+            "tn": 18,
+            "fn": 18,
+            "precision": 0.5,
+            "recall": 0.1818,
+            "f1": 0.2667,
+            "fpr": 0.1818,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 44,
+            "tp": 4,
+            "fp": 4,
+            "tn": 18,
+            "fn": 18,
+            "precision": 0.5,
+            "recall": 0.1818,
+            "f1": 0.2667,
+            "fpr": 0.1818,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-20": {
+          "samples": 36,
+          "flagged": 1,
+          "sast": {
+            "n": 36,
+            "tp": 1,
+            "fp": 0,
+            "tn": 18,
+            "fn": 17,
+            "precision": 1.0,
+            "recall": 0.0556,
+            "f1": 0.1053,
+            "fpr": 0.0,
+            "accuracy": 0.5278
+          },
+          "board": {
+            "n": 36,
+            "tp": 1,
+            "fp": 0,
+            "tn": 18,
+            "fn": 17,
+            "precision": 1.0,
+            "recall": 0.0556,
+            "f1": 0.1053,
+            "fpr": 0.0,
+            "accuracy": 0.5278
+          },
+          "fusion": {
+            "n": 36,
+            "tp": 1,
+            "fp": 0,
+            "tn": 18,
+            "fn": 17,
+            "precision": 1.0,
+            "recall": 0.0556,
+            "f1": 0.1053,
+            "fpr": 0.0,
+            "accuracy": 0.5278
+          }
+        },
+        "CWE-203": {
+          "samples": 34,
+          "flagged": 4,
+          "sast": {
+            "n": 34,
+            "tp": 2,
+            "fp": 2,
+            "tn": 15,
+            "fn": 15,
+            "precision": 0.5,
+            "recall": 0.1176,
+            "f1": 0.1905,
+            "fpr": 0.1176,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 34,
+            "tp": 2,
+            "fp": 2,
+            "tn": 15,
+            "fn": 15,
+            "precision": 0.5,
+            "recall": 0.1176,
+            "f1": 0.1905,
+            "fpr": 0.1176,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 34,
+            "tp": 2,
+            "fp": 2,
+            "tn": 15,
+            "fn": 15,
+            "precision": 0.5,
+            "recall": 0.1176,
+            "f1": 0.1905,
+            "fpr": 0.1176,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-22": {
+          "samples": 34,
+          "flagged": 6,
+          "sast": {
+            "n": 34,
+            "tp": 3,
+            "fp": 3,
+            "tn": 14,
+            "fn": 14,
+            "precision": 0.5,
+            "recall": 0.1765,
+            "f1": 0.2609,
+            "fpr": 0.1765,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 34,
+            "tp": 3,
+            "fp": 3,
+            "tn": 14,
+            "fn": 14,
+            "precision": 0.5,
+            "recall": 0.1765,
+            "f1": 0.2609,
+            "fpr": 0.1765,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 34,
+            "tp": 3,
+            "fp": 3,
+            "tn": 14,
+            "fn": 14,
+            "precision": 0.5,
+            "recall": 0.1765,
+            "f1": 0.2609,
+            "fpr": 0.1765,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-601": {
+          "samples": 32,
+          "flagged": 7,
+          "sast": {
+            "n": 32,
+            "tp": 4,
+            "fp": 3,
+            "tn": 13,
+            "fn": 12,
+            "precision": 0.5714,
+            "recall": 0.25,
+            "f1": 0.3478,
+            "fpr": 0.1875,
+            "accuracy": 0.5312
+          },
+          "board": {
+            "n": 32,
+            "tp": 4,
+            "fp": 3,
+            "tn": 13,
+            "fn": 12,
+            "precision": 0.5714,
+            "recall": 0.25,
+            "f1": 0.3478,
+            "fpr": 0.1875,
+            "accuracy": 0.5312
+          },
+          "fusion": {
+            "n": 32,
+            "tp": 4,
+            "fp": 3,
+            "tn": 13,
+            "fn": 12,
+            "precision": 0.5714,
+            "recall": 0.25,
+            "f1": 0.3478,
+            "fpr": 0.1875,
+            "accuracy": 0.5312
+          }
+        },
+        "CWE-59": {
+          "samples": 30,
+          "flagged": 9,
+          "sast": {
+            "n": 30,
+            "tp": 6,
+            "fp": 3,
+            "tn": 12,
+            "fn": 9,
+            "precision": 0.6667,
+            "recall": 0.4,
+            "f1": 0.5,
+            "fpr": 0.2,
+            "accuracy": 0.6
+          },
+          "board": {
+            "n": 30,
+            "tp": 6,
+            "fp": 3,
+            "tn": 12,
+            "fn": 9,
+            "precision": 0.6667,
+            "recall": 0.4,
+            "f1": 0.5,
+            "fpr": 0.2,
+            "accuracy": 0.6
+          },
+          "fusion": {
+            "n": 30,
+            "tp": 6,
+            "fp": 3,
+            "tn": 12,
+            "fn": 9,
+            "precision": 0.6667,
+            "recall": 0.4,
+            "f1": 0.5,
+            "fpr": 0.2,
+            "accuracy": 0.6
+          }
+        },
+        "CWE-77": {
+          "samples": 30,
+          "flagged": 12,
+          "sast": {
+            "n": 30,
+            "tp": 6,
+            "fp": 6,
+            "tn": 9,
+            "fn": 9,
+            "precision": 0.5,
+            "recall": 0.4,
+            "f1": 0.4444,
+            "fpr": 0.4,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 30,
+            "tp": 6,
+            "fp": 6,
+            "tn": 9,
+            "fn": 9,
+            "precision": 0.5,
+            "recall": 0.4,
+            "f1": 0.4444,
+            "fpr": 0.4,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 30,
+            "tp": 6,
+            "fp": 6,
+            "tn": 9,
+            "fn": 9,
+            "precision": 0.5,
+            "recall": 0.4,
+            "f1": 0.4444,
+            "fpr": 0.4,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-502": {
+          "samples": 26,
+          "flagged": 18,
+          "sast": {
+            "n": 26,
+            "tp": 12,
+            "fp": 6,
+            "tn": 7,
+            "fn": 1,
+            "precision": 0.6667,
+            "recall": 0.9231,
+            "f1": 0.7742,
+            "fpr": 0.4615,
+            "accuracy": 0.7308
+          },
+          "board": {
+            "n": 26,
+            "tp": 12,
+            "fp": 6,
+            "tn": 7,
+            "fn": 1,
+            "precision": 0.6667,
+            "recall": 0.9231,
+            "f1": 0.7742,
+            "fpr": 0.4615,
+            "accuracy": 0.7308
+          },
+          "fusion": {
+            "n": 26,
+            "tp": 12,
+            "fp": 6,
+            "tn": 7,
+            "fn": 1,
+            "precision": 0.6667,
+            "recall": 0.9231,
+            "f1": 0.7742,
+            "fpr": 0.4615,
+            "accuracy": 0.7308
+          }
+        },
+        "CWE-863": {
+          "samples": 26,
+          "flagged": 0,
+          "sast": {
+            "n": 26,
+            "tp": 0,
+            "fp": 0,
+            "tn": 13,
+            "fn": 13,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 26,
+            "tp": 0,
+            "fp": 0,
+            "tn": 13,
+            "fn": 13,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 26,
+            "tp": 0,
+            "fp": 0,
+            "tn": 13,
+            "fn": 13,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-74": {
+          "samples": 24,
+          "flagged": 4,
+          "sast": {
+            "n": 24,
+            "tp": 2,
+            "fp": 2,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.5,
+            "recall": 0.1667,
+            "f1": 0.25,
+            "fpr": 0.1667,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 24,
+            "tp": 2,
+            "fp": 2,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.5,
+            "recall": 0.1667,
+            "f1": 0.25,
+            "fpr": 0.1667,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 24,
+            "tp": 2,
+            "fp": 2,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.5,
+            "recall": 0.1667,
+            "f1": 0.25,
+            "fpr": 0.1667,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-400": {
+          "samples": 24,
+          "flagged": 0,
+          "sast": {
+            "n": 24,
+            "tp": 0,
+            "fp": 0,
+            "tn": 12,
+            "fn": 12,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 24,
+            "tp": 0,
+            "fp": 0,
+            "tn": 12,
+            "fn": 12,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 24,
+            "tp": 0,
+            "fp": 0,
+            "tn": 12,
+            "fn": 12,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-94": {
+          "samples": 23,
+          "flagged": 11,
+          "sast": {
+            "n": 23,
+            "tp": 8,
+            "fp": 3,
+            "tn": 9,
+            "fn": 3,
+            "precision": 0.7273,
+            "recall": 0.7273,
+            "f1": 0.7273,
+            "fpr": 0.25,
+            "accuracy": 0.7391
+          },
+          "board": {
+            "n": 23,
+            "tp": 8,
+            "fp": 3,
+            "tn": 9,
+            "fn": 3,
+            "precision": 0.7273,
+            "recall": 0.7273,
+            "f1": 0.7273,
+            "fpr": 0.25,
+            "accuracy": 0.7391
+          },
+          "fusion": {
+            "n": 23,
+            "tp": 8,
+            "fp": 3,
+            "tn": 9,
+            "fn": 3,
+            "precision": 0.7273,
+            "recall": 0.7273,
+            "f1": 0.7273,
+            "fpr": 0.25,
+            "accuracy": 0.7391
+          }
+        },
+        "CWE-78": {
+          "samples": 22,
+          "flagged": 18,
+          "sast": {
+            "n": 22,
+            "tp": 9,
+            "fp": 9,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.5,
+            "recall": 0.8182,
+            "f1": 0.6207,
+            "fpr": 0.8182,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 22,
+            "tp": 9,
+            "fp": 7,
+            "tn": 4,
+            "fn": 2,
+            "precision": 0.5625,
+            "recall": 0.8182,
+            "f1": 0.6667,
+            "fpr": 0.6364,
+            "accuracy": 0.5909
+          },
+          "fusion": {
+            "n": 22,
+            "tp": 9,
+            "fp": 9,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.5,
+            "recall": 0.8182,
+            "f1": 0.6207,
+            "fpr": 0.8182,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-unknown": {
+          "samples": 22,
+          "flagged": 2,
+          "sast": {
+            "n": 22,
+            "tp": 1,
+            "fp": 1,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.5,
+            "recall": 0.0909,
+            "f1": 0.1538,
+            "fpr": 0.0909,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 22,
+            "tp": 1,
+            "fp": 1,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.5,
+            "recall": 0.0909,
+            "f1": 0.1538,
+            "fpr": 0.0909,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 22,
+            "tp": 1,
+            "fp": 1,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.5,
+            "recall": 0.0909,
+            "f1": 0.1538,
+            "fpr": 0.0909,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-89": {
+          "samples": 22,
+          "flagged": 9,
+          "sast": {
+            "n": 22,
+            "tp": 6,
+            "fp": 3,
+            "tn": 8,
+            "fn": 5,
+            "precision": 0.6667,
+            "recall": 0.5455,
+            "f1": 0.6,
+            "fpr": 0.2727,
+            "accuracy": 0.6364
+          },
+          "board": {
+            "n": 22,
+            "tp": 6,
+            "fp": 3,
+            "tn": 8,
+            "fn": 5,
+            "precision": 0.6667,
+            "recall": 0.5455,
+            "f1": 0.6,
+            "fpr": 0.2727,
+            "accuracy": 0.6364
+          },
+          "fusion": {
+            "n": 22,
+            "tp": 6,
+            "fp": 3,
+            "tn": 8,
+            "fn": 5,
+            "precision": 0.6667,
+            "recall": 0.5455,
+            "f1": 0.6,
+            "fpr": 0.2727,
+            "accuracy": 0.6364
+          }
+        },
+        "CWE-264": {
+          "samples": 22,
+          "flagged": 5,
+          "sast": {
+            "n": 22,
+            "tp": 3,
+            "fp": 2,
+            "tn": 9,
+            "fn": 8,
+            "precision": 0.6,
+            "recall": 0.2727,
+            "f1": 0.375,
+            "fpr": 0.1818,
+            "accuracy": 0.5455
+          },
+          "board": {
+            "n": 22,
+            "tp": 3,
+            "fp": 2,
+            "tn": 9,
+            "fn": 8,
+            "precision": 0.6,
+            "recall": 0.2727,
+            "f1": 0.375,
+            "fpr": 0.1818,
+            "accuracy": 0.5455
+          },
+          "fusion": {
+            "n": 22,
+            "tp": 3,
+            "fp": 2,
+            "tn": 9,
+            "fn": 8,
+            "precision": 0.6,
+            "recall": 0.2727,
+            "f1": 0.375,
+            "fpr": 0.1818,
+            "accuracy": 0.5455
+          }
+        },
+        "CWE-770": {
+          "samples": 22,
+          "flagged": 4,
+          "sast": {
+            "n": 22,
+            "tp": 2,
+            "fp": 2,
+            "tn": 9,
+            "fn": 9,
+            "precision": 0.5,
+            "recall": 0.1818,
+            "f1": 0.2667,
+            "fpr": 0.1818,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 22,
+            "tp": 2,
+            "fp": 2,
+            "tn": 9,
+            "fn": 9,
+            "precision": 0.5,
+            "recall": 0.1818,
+            "f1": 0.2667,
+            "fpr": 0.1818,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 22,
+            "tp": 2,
+            "fp": 2,
+            "tn": 9,
+            "fn": 9,
+            "precision": 0.5,
+            "recall": 0.1818,
+            "f1": 0.2667,
+            "fpr": 0.1818,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-29": {
+          "samples": 20,
+          "flagged": 0,
+          "sast": {
+            "n": 20,
+            "tp": 0,
+            "fp": 0,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 20,
+            "tp": 0,
+            "fp": 0,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 20,
+            "tp": 0,
+            "fp": 0,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-269": {
+          "samples": 20,
+          "flagged": 6,
+          "sast": {
+            "n": 20,
+            "tp": 3,
+            "fp": 3,
+            "tn": 7,
+            "fn": 7,
+            "precision": 0.5,
+            "recall": 0.3,
+            "f1": 0.375,
+            "fpr": 0.3,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 20,
+            "tp": 3,
+            "fp": 3,
+            "tn": 7,
+            "fn": 7,
+            "precision": 0.5,
+            "recall": 0.3,
+            "f1": 0.375,
+            "fpr": 0.3,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 20,
+            "tp": 3,
+            "fp": 3,
+            "tn": 7,
+            "fn": 7,
+            "precision": 0.5,
+            "recall": 0.3,
+            "f1": 0.375,
+            "fpr": 0.3,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-532": {
+          "samples": 20,
+          "flagged": 4,
+          "sast": {
+            "n": 20,
+            "tp": 2,
+            "fp": 2,
+            "tn": 8,
+            "fn": 8,
+            "precision": 0.5,
+            "recall": 0.2,
+            "f1": 0.2857,
+            "fpr": 0.2,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 20,
+            "tp": 2,
+            "fp": 2,
+            "tn": 8,
+            "fn": 8,
+            "precision": 0.5,
+            "recall": 0.2,
+            "f1": 0.2857,
+            "fpr": 0.2,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 20,
+            "tp": 2,
+            "fp": 2,
+            "tn": 8,
+            "fn": 8,
+            "precision": 0.5,
+            "recall": 0.2,
+            "f1": 0.2857,
+            "fpr": 0.2,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-200": {
+          "samples": 20,
+          "flagged": 0,
+          "sast": {
+            "n": 20,
+            "tp": 0,
+            "fp": 0,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 20,
+            "tp": 0,
+            "fp": 0,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 20,
+            "tp": 0,
+            "fp": 0,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-352": {
+          "samples": 18,
+          "flagged": 1,
+          "sast": {
+            "n": 18,
+            "tp": 1,
+            "fp": 0,
+            "tn": 9,
+            "fn": 8,
+            "precision": 1.0,
+            "recall": 0.1111,
+            "f1": 0.2,
+            "fpr": 0.0,
+            "accuracy": 0.5556
+          },
+          "board": {
+            "n": 18,
+            "tp": 1,
+            "fp": 0,
+            "tn": 9,
+            "fn": 8,
+            "precision": 1.0,
+            "recall": 0.1111,
+            "f1": 0.2,
+            "fpr": 0.0,
+            "accuracy": 0.5556
+          },
+          "fusion": {
+            "n": 18,
+            "tp": 1,
+            "fp": 0,
+            "tn": 9,
+            "fn": 8,
+            "precision": 1.0,
+            "recall": 0.1111,
+            "f1": 0.2,
+            "fpr": 0.0,
+            "accuracy": 0.5556
+          }
+        },
+        "CWE-79": {
+          "samples": 18,
+          "flagged": 6,
+          "sast": {
+            "n": 18,
+            "tp": 4,
+            "fp": 2,
+            "tn": 7,
+            "fn": 5,
+            "precision": 0.6667,
+            "recall": 0.4444,
+            "f1": 0.5333,
+            "fpr": 0.2222,
+            "accuracy": 0.6111
+          },
+          "board": {
+            "n": 18,
+            "tp": 4,
+            "fp": 2,
+            "tn": 7,
+            "fn": 5,
+            "precision": 0.6667,
+            "recall": 0.4444,
+            "f1": 0.5333,
+            "fpr": 0.2222,
+            "accuracy": 0.6111
+          },
+          "fusion": {
+            "n": 18,
+            "tp": 4,
+            "fp": 2,
+            "tn": 7,
+            "fn": 5,
+            "precision": 0.6667,
+            "recall": 0.4444,
+            "f1": 0.5333,
+            "fpr": 0.2222,
+            "accuracy": 0.6111
+          }
+        },
+        "CWE-287": {
+          "samples": 16,
+          "flagged": 1,
+          "sast": {
+            "n": 16,
+            "tp": 1,
+            "fp": 0,
+            "tn": 8,
+            "fn": 7,
+            "precision": 1.0,
+            "recall": 0.125,
+            "f1": 0.2222,
+            "fpr": 0.0,
+            "accuracy": 0.5625
+          },
+          "board": {
+            "n": 16,
+            "tp": 1,
+            "fp": 0,
+            "tn": 8,
+            "fn": 7,
+            "precision": 1.0,
+            "recall": 0.125,
+            "f1": 0.2222,
+            "fpr": 0.0,
+            "accuracy": 0.5625
+          },
+          "fusion": {
+            "n": 16,
+            "tp": 1,
+            "fp": 0,
+            "tn": 8,
+            "fn": 7,
+            "precision": 1.0,
+            "recall": 0.125,
+            "f1": 0.2222,
+            "fpr": 0.0,
+            "accuracy": 0.5625
+          }
+        },
+        "CWE-295": {
+          "samples": 14,
+          "flagged": 2,
+          "sast": {
+            "n": 14,
+            "tp": 1,
+            "fp": 1,
+            "tn": 6,
+            "fn": 6,
+            "precision": 0.5,
+            "recall": 0.1429,
+            "f1": 0.2222,
+            "fpr": 0.1429,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 14,
+            "tp": 1,
+            "fp": 1,
+            "tn": 6,
+            "fn": 6,
+            "precision": 0.5,
+            "recall": 0.1429,
+            "f1": 0.2222,
+            "fpr": 0.1429,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 14,
+            "tp": 1,
+            "fp": 1,
+            "tn": 6,
+            "fn": 6,
+            "precision": 0.5,
+            "recall": 0.1429,
+            "f1": 0.2222,
+            "fpr": 0.1429,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-674": {
+          "samples": 14,
+          "flagged": 0,
+          "sast": {
+            "n": 14,
+            "tp": 0,
+            "fp": 0,
+            "tn": 7,
+            "fn": 7,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 14,
+            "tp": 0,
+            "fp": 0,
+            "tn": 7,
+            "fn": 7,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 14,
+            "tp": 0,
+            "fp": 0,
+            "tn": 7,
+            "fn": 7,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-209": {
+          "samples": 14,
+          "flagged": 2,
+          "sast": {
+            "n": 14,
+            "tp": 1,
+            "fp": 1,
+            "tn": 6,
+            "fn": 6,
+            "precision": 0.5,
+            "recall": 0.1429,
+            "f1": 0.2222,
+            "fpr": 0.1429,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 14,
+            "tp": 1,
+            "fp": 0,
+            "tn": 7,
+            "fn": 6,
+            "precision": 1.0,
+            "recall": 0.1429,
+            "f1": 0.25,
+            "fpr": 0.0,
+            "accuracy": 0.5714
+          },
+          "fusion": {
+            "n": 14,
+            "tp": 1,
+            "fp": 1,
+            "tn": 6,
+            "fn": 6,
+            "precision": 0.5,
+            "recall": 0.1429,
+            "f1": 0.2222,
+            "fpr": 0.1429,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-1333": {
+          "samples": 14,
+          "flagged": 1,
+          "sast": {
+            "n": 14,
+            "tp": 0,
+            "fp": 1,
+            "tn": 6,
+            "fn": 7,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.1429,
+            "accuracy": 0.4286
+          },
+          "board": {
+            "n": 14,
+            "tp": 0,
+            "fp": 1,
+            "tn": 6,
+            "fn": 7,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.1429,
+            "accuracy": 0.4286
+          },
+          "fusion": {
+            "n": 14,
+            "tp": 0,
+            "fp": 1,
+            "tn": 6,
+            "fn": 7,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.1429,
+            "accuracy": 0.4286
+          }
+        },
+        "CWE-362": {
+          "samples": 12,
+          "flagged": 3,
+          "sast": {
+            "n": 12,
+            "tp": 1,
+            "fp": 2,
+            "tn": 4,
+            "fn": 5,
+            "precision": 0.3333,
+            "recall": 0.1667,
+            "f1": 0.2222,
+            "fpr": 0.3333,
+            "accuracy": 0.4167
+          },
+          "board": {
+            "n": 12,
+            "tp": 1,
+            "fp": 2,
+            "tn": 4,
+            "fn": 5,
+            "precision": 0.3333,
+            "recall": 0.1667,
+            "f1": 0.2222,
+            "fpr": 0.3333,
+            "accuracy": 0.4167
+          },
+          "fusion": {
+            "n": 12,
+            "tp": 1,
+            "fp": 2,
+            "tn": 4,
+            "fn": 5,
+            "precision": 0.3333,
+            "recall": 0.1667,
+            "f1": 0.2222,
+            "fpr": 0.3333,
+            "accuracy": 0.4167
+          }
+        },
+        "CWE-611": {
+          "samples": 12,
+          "flagged": 5,
+          "sast": {
+            "n": 12,
+            "tp": 3,
+            "fp": 2,
+            "tn": 4,
+            "fn": 3,
+            "precision": 0.6,
+            "recall": 0.5,
+            "f1": 0.5455,
+            "fpr": 0.3333,
+            "accuracy": 0.5833
+          },
+          "board": {
+            "n": 12,
+            "tp": 2,
+            "fp": 1,
+            "tn": 5,
+            "fn": 4,
+            "precision": 0.6667,
+            "recall": 0.3333,
+            "f1": 0.4444,
+            "fpr": 0.1667,
+            "accuracy": 0.5833
+          },
+          "fusion": {
+            "n": 12,
+            "tp": 3,
+            "fp": 2,
+            "tn": 4,
+            "fn": 3,
+            "precision": 0.6,
+            "recall": 0.5,
+            "f1": 0.5455,
+            "fpr": 0.3333,
+            "accuracy": 0.5833
+          }
+        },
+        "CWE-787": {
+          "samples": 12,
+          "flagged": 8,
+          "sast": {
+            "n": 12,
+            "tp": 4,
+            "fp": 4,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.5,
+            "recall": 0.6667,
+            "f1": 0.5714,
+            "fpr": 0.6667,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 12,
+            "tp": 4,
+            "fp": 4,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.5,
+            "recall": 0.6667,
+            "f1": 0.5714,
+            "fpr": 0.6667,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 12,
+            "tp": 4,
+            "fp": 4,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.5,
+            "recall": 0.6667,
+            "f1": 0.5714,
+            "fpr": 0.6667,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-1021": {
+          "samples": 12,
+          "flagged": 0,
+          "sast": {
+            "n": 12,
+            "tp": 0,
+            "fp": 0,
+            "tn": 6,
+            "fn": 6,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 12,
+            "tp": 0,
+            "fp": 0,
+            "tn": 6,
+            "fn": 6,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 12,
+            "tp": 0,
+            "fp": 0,
+            "tn": 6,
+            "fn": 6,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-331": {
+          "samples": 10,
+          "flagged": 4,
+          "sast": {
+            "n": 10,
+            "tp": 2,
+            "fp": 2,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.4,
+            "f1": 0.4444,
+            "fpr": 0.4,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 10,
+            "tp": 2,
+            "fp": 2,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.4,
+            "f1": 0.4444,
+            "fpr": 0.4,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 10,
+            "tp": 2,
+            "fp": 2,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.4,
+            "f1": 0.4444,
+            "fpr": 0.4,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-310": {
+          "samples": 10,
+          "flagged": 0,
+          "sast": {
+            "n": 10,
+            "tp": 0,
+            "fp": 0,
+            "tn": 5,
+            "fn": 5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 10,
+            "tp": 0,
+            "fp": 0,
+            "tn": 5,
+            "fn": 5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 10,
+            "tp": 0,
+            "fp": 0,
+            "tn": 5,
+            "fn": 5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-312": {
+          "samples": 10,
+          "flagged": 0,
+          "sast": {
+            "n": 10,
+            "tp": 0,
+            "fp": 0,
+            "tn": 5,
+            "fn": 5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 10,
+            "tp": 0,
+            "fp": 0,
+            "tn": 5,
+            "fn": 5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 10,
+            "tp": 0,
+            "fp": 0,
+            "tn": 5,
+            "fn": 5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-668": {
+          "samples": 10,
+          "flagged": 2,
+          "sast": {
+            "n": 10,
+            "tp": 2,
+            "fp": 0,
+            "tn": 5,
+            "fn": 3,
+            "precision": 1.0,
+            "recall": 0.4,
+            "f1": 0.5714,
+            "fpr": 0.0,
+            "accuracy": 0.7
+          },
+          "board": {
+            "n": 10,
+            "tp": 2,
+            "fp": 0,
+            "tn": 5,
+            "fn": 3,
+            "precision": 1.0,
+            "recall": 0.4,
+            "f1": 0.5714,
+            "fpr": 0.0,
+            "accuracy": 0.7
+          },
+          "fusion": {
+            "n": 10,
+            "tp": 2,
+            "fp": 0,
+            "tn": 5,
+            "fn": 3,
+            "precision": 1.0,
+            "recall": 0.4,
+            "f1": 0.5714,
+            "fpr": 0.0,
+            "accuracy": 0.7
+          }
+        },
+        "CWE-306": {
+          "samples": 10,
+          "flagged": 0,
+          "sast": {
+            "n": 10,
+            "tp": 0,
+            "fp": 0,
+            "tn": 5,
+            "fn": 5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 10,
+            "tp": 0,
+            "fp": 0,
+            "tn": 5,
+            "fn": 5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 10,
+            "tp": 0,
+            "fp": 0,
+            "tn": 5,
+            "fn": 5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-116": {
+          "samples": 8,
+          "flagged": 2,
+          "sast": {
+            "n": 8,
+            "tp": 1,
+            "fp": 1,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.25,
+            "f1": 0.3333,
+            "fpr": 0.25,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 8,
+            "tp": 1,
+            "fp": 1,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.25,
+            "f1": 0.3333,
+            "fpr": 0.25,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 8,
+            "tp": 1,
+            "fp": 1,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.25,
+            "f1": 0.3333,
+            "fpr": 0.25,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-93": {
+          "samples": 8,
+          "flagged": 0,
+          "sast": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-670": {
+          "samples": 8,
+          "flagged": 2,
+          "sast": {
+            "n": 8,
+            "tp": 1,
+            "fp": 1,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.25,
+            "f1": 0.3333,
+            "fpr": 0.25,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 8,
+            "tp": 1,
+            "fp": 1,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.25,
+            "f1": 0.3333,
+            "fpr": 0.25,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 8,
+            "tp": 1,
+            "fp": 1,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.25,
+            "f1": 0.3333,
+            "fpr": 0.25,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-290": {
+          "samples": 8,
+          "flagged": 0,
+          "sast": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-789": {
+          "samples": 8,
+          "flagged": 0,
+          "sast": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-284": {
+          "samples": 8,
+          "flagged": 2,
+          "sast": {
+            "n": 8,
+            "tp": 1,
+            "fp": 1,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.25,
+            "f1": 0.3333,
+            "fpr": 0.25,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 8,
+            "tp": 1,
+            "fp": 1,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.25,
+            "f1": 0.3333,
+            "fpr": 0.25,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 8,
+            "tp": 1,
+            "fp": 1,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.25,
+            "f1": 0.3333,
+            "fpr": 0.25,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-73": {
+          "samples": 8,
+          "flagged": 0,
+          "sast": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-697": {
+          "samples": 8,
+          "flagged": 0,
+          "sast": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-212": {
+          "samples": 6,
+          "flagged": 0,
+          "sast": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-19": {
+          "samples": 6,
+          "flagged": 1,
+          "sast": {
+            "n": 6,
+            "tp": 1,
+            "fp": 0,
+            "tn": 3,
+            "fn": 2,
+            "precision": 1.0,
+            "recall": 0.3333,
+            "f1": 0.5,
+            "fpr": 0.0,
+            "accuracy": 0.6667
+          },
+          "board": {
+            "n": 6,
+            "tp": 1,
+            "fp": 0,
+            "tn": 3,
+            "fn": 2,
+            "precision": 1.0,
+            "recall": 0.3333,
+            "f1": 0.5,
+            "fpr": 0.0,
+            "accuracy": 0.6667
+          },
+          "fusion": {
+            "n": 6,
+            "tp": 1,
+            "fp": 0,
+            "tn": 3,
+            "fn": 2,
+            "precision": 1.0,
+            "recall": 0.3333,
+            "f1": 0.5,
+            "fpr": 0.0,
+            "accuracy": 0.6667
+          }
+        },
+        "CWE-693": {
+          "samples": 6,
+          "flagged": 0,
+          "sast": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-254": {
+          "samples": 6,
+          "flagged": 0,
+          "sast": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-521": {
+          "samples": 6,
+          "flagged": 2,
+          "sast": {
+            "n": 6,
+            "tp": 1,
+            "fp": 1,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.5,
+            "recall": 0.3333,
+            "f1": 0.4,
+            "fpr": 0.3333,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 6,
+            "tp": 1,
+            "fp": 1,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.5,
+            "recall": 0.3333,
+            "f1": 0.4,
+            "fpr": 0.3333,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 6,
+            "tp": 1,
+            "fp": 1,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.5,
+            "recall": 0.3333,
+            "f1": 0.4,
+            "fpr": 0.3333,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-134": {
+          "samples": 6,
+          "flagged": 0,
+          "sast": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-776": {
+          "samples": 6,
+          "flagged": 1,
+          "sast": {
+            "n": 6,
+            "tp": 1,
+            "fp": 0,
+            "tn": 3,
+            "fn": 2,
+            "precision": 1.0,
+            "recall": 0.3333,
+            "f1": 0.5,
+            "fpr": 0.0,
+            "accuracy": 0.6667
+          },
+          "board": {
+            "n": 6,
+            "tp": 1,
+            "fp": 0,
+            "tn": 3,
+            "fn": 2,
+            "precision": 1.0,
+            "recall": 0.3333,
+            "f1": 0.5,
+            "fpr": 0.0,
+            "accuracy": 0.6667
+          },
+          "fusion": {
+            "n": 6,
+            "tp": 1,
+            "fp": 0,
+            "tn": 3,
+            "fn": 2,
+            "precision": 1.0,
+            "recall": 0.3333,
+            "f1": 0.5,
+            "fpr": 0.0,
+            "accuracy": 0.6667
+          }
+        },
+        "CWE-367": {
+          "samples": 6,
+          "flagged": 0,
+          "sast": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-330": {
+          "samples": 6,
+          "flagged": 5,
+          "sast": {
+            "n": 6,
+            "tp": 2,
+            "fp": 3,
+            "tn": 0,
+            "fn": 1,
+            "precision": 0.4,
+            "recall": 0.6667,
+            "f1": 0.5,
+            "fpr": 1.0,
+            "accuracy": 0.3333
+          },
+          "board": {
+            "n": 6,
+            "tp": 2,
+            "fp": 3,
+            "tn": 0,
+            "fn": 1,
+            "precision": 0.4,
+            "recall": 0.6667,
+            "f1": 0.5,
+            "fpr": 1.0,
+            "accuracy": 0.3333
+          },
+          "fusion": {
+            "n": 6,
+            "tp": 2,
+            "fp": 3,
+            "tn": 0,
+            "fn": 1,
+            "precision": 0.4,
+            "recall": 0.6667,
+            "f1": 0.5,
+            "fpr": 1.0,
+            "accuracy": 0.3333
+          }
+        },
+        "CWE-354": {
+          "samples": 6,
+          "flagged": 0,
+          "sast": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-835": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-307": {
+          "samples": 4,
+          "flagged": 2,
+          "sast": {
+            "n": 4,
+            "tp": 1,
+            "fp": 1,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1": 0.5,
+            "fpr": 0.5,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 1,
+            "fp": 1,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1": 0.5,
+            "fpr": 0.5,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 1,
+            "fp": 1,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1": 0.5,
+            "fpr": 0.5,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-347": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-1236": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-311": {
+          "samples": 4,
+          "flagged": 2,
+          "sast": {
+            "n": 4,
+            "tp": 1,
+            "fp": 1,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1": 0.5,
+            "fpr": 0.5,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 1,
+            "fp": 1,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1": 0.5,
+            "fpr": 0.5,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 1,
+            "fp": 1,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1": 0.5,
+            "fpr": 0.5,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-359": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-215": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-252": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-255": {
+          "samples": 4,
+          "flagged": 2,
+          "sast": {
+            "n": 4,
+            "tp": 1,
+            "fp": 1,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1": 0.5,
+            "fpr": 0.5,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 1,
+            "fp": 1,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1": 0.5,
+            "fpr": 0.5,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 1,
+            "fp": 1,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1": 0.5,
+            "fpr": 0.5,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-319": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-921": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-23": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-862": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-366": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-444": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-285": {
+          "samples": 4,
+          "flagged": 4,
+          "sast": {
+            "n": 4,
+            "tp": 2,
+            "fp": 2,
+            "tn": 0,
+            "fn": 0,
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6667,
+            "fpr": 1.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 2,
+            "fp": 2,
+            "tn": 0,
+            "fn": 0,
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6667,
+            "fpr": 1.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 2,
+            "fp": 2,
+            "tn": 0,
+            "fn": 0,
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6667,
+            "fpr": 1.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-667": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-640": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-327": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-434": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-36": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-120": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-613": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-416": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-1284": {
+          "samples": 2,
+          "flagged": 0,
+          "sast": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-755": {
+          "samples": 2,
+          "flagged": 2,
+          "sast": {
+            "n": 2,
+            "tp": 1,
+            "fp": 1,
+            "tn": 0,
+            "fn": 0,
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6667,
+            "fpr": 1.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 2,
+            "tp": 1,
+            "fp": 1,
+            "tn": 0,
+            "fn": 0,
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6667,
+            "fpr": 1.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 2,
+            "tp": 1,
+            "fp": 1,
+            "tn": 0,
+            "fn": 0,
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6667,
+            "fpr": 1.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-346": {
+          "samples": 2,
+          "flagged": 0,
+          "sast": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-707": {
+          "samples": 2,
+          "flagged": 0,
+          "sast": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-172": {
+          "samples": 2,
+          "flagged": 0,
+          "sast": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-377": {
+          "samples": 2,
+          "flagged": 1,
+          "sast": {
+            "n": 2,
+            "tp": 1,
+            "fp": 0,
+            "tn": 1,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "fpr": 0.0,
+            "accuracy": 1.0
+          },
+          "board": {
+            "n": 2,
+            "tp": 1,
+            "fp": 0,
+            "tn": 1,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "fpr": 0.0,
+            "accuracy": 1.0
+          },
+          "fusion": {
+            "n": 2,
+            "tp": 1,
+            "fp": 0,
+            "tn": 1,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "fpr": 0.0,
+            "accuracy": 1.0
+          }
+        },
+        "CWE-427": {
+          "samples": 2,
+          "flagged": 0,
+          "sast": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-522": {
+          "samples": 2,
+          "flagged": 0,
+          "sast": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-732": {
+          "samples": 2,
+          "flagged": 0,
+          "sast": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-1336": {
+          "samples": 2,
+          "flagged": 1,
+          "sast": {
+            "n": 2,
+            "tp": 1,
+            "fp": 0,
+            "tn": 1,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "fpr": 0.0,
+            "accuracy": 1.0
+          },
+          "board": {
+            "n": 2,
+            "tp": 1,
+            "fp": 0,
+            "tn": 1,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "fpr": 0.0,
+            "accuracy": 1.0
+          },
+          "fusion": {
+            "n": 2,
+            "tp": 1,
+            "fp": 0,
+            "tn": 1,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "fpr": 0.0,
+            "accuracy": 1.0
+          }
+        }
+      }
+    },
+    "vudenc": {
+      "samples": 499,
+      "pairs": 250,
+      "end_to_end": {
+        "sast": {
+          "n": 499,
+          "tp": 63,
+          "fp": 48,
+          "tn": 202,
+          "fn": 186,
+          "precision": 0.5676,
+          "recall": 0.253,
+          "f1": 0.35,
+          "fpr": 0.192,
+          "accuracy": 0.5311
+        },
+        "board": {
+          "n": 499,
+          "tp": 62,
+          "fp": 46,
+          "tn": 204,
+          "fn": 187,
+          "precision": 0.5741,
+          "recall": 0.249,
+          "f1": 0.3473,
+          "fpr": 0.184,
+          "accuracy": 0.5331
+        },
+        "fusion": {
+          "n": 499,
+          "tp": 63,
+          "fp": 48,
+          "tn": 202,
+          "fn": 186,
+          "precision": 0.5676,
+          "recall": 0.253,
+          "f1": 0.35,
+          "fpr": 0.192,
+          "accuracy": 0.5311
+        }
+      },
+      "sast_flagged": {
+        "n": 111,
+        "vulnerable": 63,
+        "fixed": 48,
+        "sast": {
+          "n": 111,
+          "tp": 63,
+          "fp": 48,
+          "tn": 0,
+          "fn": 0,
+          "precision": 0.5676,
+          "recall": 1.0,
+          "f1": 0.7241,
+          "fpr": 1.0,
+          "accuracy": 0.5676
+        },
+        "board": {
+          "n": 111,
+          "tp": 62,
+          "fp": 46,
+          "tn": 2,
+          "fn": 1,
+          "precision": 0.5741,
+          "recall": 0.9841,
+          "f1": 0.7251,
+          "fpr": 0.9583,
+          "accuracy": 0.5766
+        },
+        "fusion": {
+          "n": 111,
+          "tp": 63,
+          "fp": 48,
+          "tn": 0,
+          "fn": 0,
+          "precision": 0.5676,
+          "recall": 1.0,
+          "f1": 0.7241,
+          "fpr": 1.0,
+          "accuracy": 0.5676
+        },
+        "board_false_positives_removed": 0.0417,
+        "board_true_positives_kept": 0.9841,
+        "fusion_false_positives_removed": 0.0,
+        "fusion_true_positives_kept": 1.0
+      },
+      "pairwise": {
+        "sast": {
+          "pairs": 249,
+          "P-C": 18,
+          "P-V": 45,
+          "P-B": 183,
+          "P-R": 3,
+          "P-C_rate": 0.0723,
+          "P-V_rate": 0.1807,
+          "P-B_rate": 0.7349,
+          "P-R_rate": 0.012
+        },
+        "board": {
+          "pairs": 249,
+          "P-C": 20,
+          "P-V": 42,
+          "P-B": 183,
+          "P-R": 4,
+          "P-C_rate": 0.0803,
+          "P-V_rate": 0.1687,
+          "P-B_rate": 0.7349,
+          "P-R_rate": 0.0161
+        },
+        "fusion": {
+          "pairs": 249,
+          "P-C": 18,
+          "P-V": 45,
+          "P-B": 183,
+          "P-R": 3,
+          "P-C_rate": 0.0723,
+          "P-V_rate": 0.1807,
+          "P-B_rate": 0.7349,
+          "P-R_rate": 0.012
+        }
+      },
+      "board_telemetry": {
+        "findings": 192,
+        "cpg_success_rate": 1.0,
+        "cpg_taint_found_rate": 0.0,
+        "rag_context_rate": 1.0,
+        "judge_false_positive_rate": 0.0365,
+        "evidence_grounded_rate": 0.0573,
+        "evidence_rule_override_rate": 0.0156,
+        "by_tool": {
+          "bandit": 155,
+          "semgrep": 37
+        }
+      },
+      "per_cwe": {
+        "CWE-78": {
+          "samples": 92,
+          "flagged": 35,
+          "sast": {
+            "n": 92,
+            "tp": 16,
+            "fp": 19,
+            "tn": 27,
+            "fn": 30,
+            "precision": 0.4571,
+            "recall": 0.3478,
+            "f1": 0.3951,
+            "fpr": 0.413,
+            "accuracy": 0.4674
+          },
+          "board": {
+            "n": 92,
+            "tp": 16,
+            "fp": 18,
+            "tn": 28,
+            "fn": 30,
+            "precision": 0.4706,
+            "recall": 0.3478,
+            "f1": 0.4,
+            "fpr": 0.3913,
+            "accuracy": 0.4783
+          },
+          "fusion": {
+            "n": 92,
+            "tp": 16,
+            "fp": 19,
+            "tn": 27,
+            "fn": 30,
+            "precision": 0.4571,
+            "recall": 0.3478,
+            "f1": 0.3951,
+            "fpr": 0.413,
+            "accuracy": 0.4674
+          }
+        },
+        "CWE-89": {
+          "samples": 84,
+          "flagged": 36,
+          "sast": {
+            "n": 84,
+            "tp": 26,
+            "fp": 10,
+            "tn": 32,
+            "fn": 16,
+            "precision": 0.7222,
+            "recall": 0.619,
+            "f1": 0.6667,
+            "fpr": 0.2381,
+            "accuracy": 0.6905
+          },
+          "board": {
+            "n": 84,
+            "tp": 26,
+            "fp": 10,
+            "tn": 32,
+            "fn": 16,
+            "precision": 0.7222,
+            "recall": 0.619,
+            "f1": 0.6667,
+            "fpr": 0.2381,
+            "accuracy": 0.6905
+          },
+          "fusion": {
+            "n": 84,
+            "tp": 26,
+            "fp": 10,
+            "tn": 32,
+            "fn": 16,
+            "precision": 0.7222,
+            "recall": 0.619,
+            "f1": 0.6667,
+            "fpr": 0.2381,
+            "accuracy": 0.6905
+          }
+        },
+        "CWE-352": {
+          "samples": 82,
+          "flagged": 10,
+          "sast": {
+            "n": 82,
+            "tp": 5,
+            "fp": 5,
+            "tn": 36,
+            "fn": 36,
+            "precision": 0.5,
+            "recall": 0.122,
+            "f1": 0.1961,
+            "fpr": 0.122,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 82,
+            "tp": 5,
+            "fp": 4,
+            "tn": 37,
+            "fn": 36,
+            "precision": 0.5556,
+            "recall": 0.122,
+            "f1": 0.2,
+            "fpr": 0.0976,
+            "accuracy": 0.5122
+          },
+          "fusion": {
+            "n": 82,
+            "tp": 5,
+            "fp": 5,
+            "tn": 36,
+            "fn": 36,
+            "precision": 0.5,
+            "recall": 0.122,
+            "f1": 0.1961,
+            "fpr": 0.122,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-94": {
+          "samples": 82,
+          "flagged": 8,
+          "sast": {
+            "n": 82,
+            "tp": 4,
+            "fp": 4,
+            "tn": 37,
+            "fn": 37,
+            "precision": 0.5,
+            "recall": 0.0976,
+            "f1": 0.1633,
+            "fpr": 0.0976,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 82,
+            "tp": 3,
+            "fp": 4,
+            "tn": 37,
+            "fn": 38,
+            "precision": 0.4286,
+            "recall": 0.0732,
+            "f1": 0.125,
+            "fpr": 0.0976,
+            "accuracy": 0.4878
+          },
+          "fusion": {
+            "n": 82,
+            "tp": 4,
+            "fp": 4,
+            "tn": 37,
+            "fn": 37,
+            "precision": 0.5,
+            "recall": 0.0976,
+            "f1": 0.1633,
+            "fpr": 0.0976,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-601": {
+          "samples": 64,
+          "flagged": 15,
+          "sast": {
+            "n": 64,
+            "tp": 8,
+            "fp": 7,
+            "tn": 25,
+            "fn": 24,
+            "precision": 0.5333,
+            "recall": 0.25,
+            "f1": 0.3404,
+            "fpr": 0.2188,
+            "accuracy": 0.5156
+          },
+          "board": {
+            "n": 64,
+            "tp": 8,
+            "fp": 7,
+            "tn": 25,
+            "fn": 24,
+            "precision": 0.5333,
+            "recall": 0.25,
+            "f1": 0.3404,
+            "fpr": 0.2188,
+            "accuracy": 0.5156
+          },
+          "fusion": {
+            "n": 64,
+            "tp": 8,
+            "fp": 7,
+            "tn": 25,
+            "fn": 24,
+            "precision": 0.5333,
+            "recall": 0.25,
+            "f1": 0.3404,
+            "fpr": 0.2188,
+            "accuracy": 0.5156
+          }
+        },
+        "CWE-22": {
+          "samples": 54,
+          "flagged": 4,
+          "sast": {
+            "n": 54,
+            "tp": 2,
+            "fp": 2,
+            "tn": 25,
+            "fn": 25,
+            "precision": 0.5,
+            "recall": 0.0741,
+            "f1": 0.129,
+            "fpr": 0.0741,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 54,
+            "tp": 2,
+            "fp": 2,
+            "tn": 25,
+            "fn": 25,
+            "precision": 0.5,
+            "recall": 0.0741,
+            "f1": 0.129,
+            "fpr": 0.0741,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 54,
+            "tp": 2,
+            "fp": 2,
+            "tn": 25,
+            "fn": 25,
+            "precision": 0.5,
+            "recall": 0.0741,
+            "f1": 0.129,
+            "fpr": 0.0741,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-79": {
+          "samples": 41,
+          "flagged": 3,
+          "sast": {
+            "n": 41,
+            "tp": 2,
+            "fp": 1,
+            "tn": 20,
+            "fn": 18,
+            "precision": 0.6667,
+            "recall": 0.1,
+            "f1": 0.1739,
+            "fpr": 0.0476,
+            "accuracy": 0.5366
+          },
+          "board": {
+            "n": 41,
+            "tp": 2,
+            "fp": 1,
+            "tn": 20,
+            "fn": 18,
+            "precision": 0.6667,
+            "recall": 0.1,
+            "f1": 0.1739,
+            "fpr": 0.0476,
+            "accuracy": 0.5366
+          },
+          "fusion": {
+            "n": 41,
+            "tp": 2,
+            "fp": 1,
+            "tn": 20,
+            "fn": 18,
+            "precision": 0.6667,
+            "recall": 0.1,
+            "f1": 0.1739,
+            "fpr": 0.0476,
+            "accuracy": 0.5366
+          }
+        }
+      }
+    },
+    "combined": {
+      "samples": 1498,
+      "pairs": 750,
+      "end_to_end": {
+        "sast": {
+          "n": 1498,
+          "tp": 173,
+          "fp": 130,
+          "tn": 620,
+          "fn": 575,
+          "precision": 0.571,
+          "recall": 0.2313,
+          "f1": 0.3292,
+          "fpr": 0.1733,
+          "accuracy": 0.5294
+        },
+        "board": {
+          "n": 1498,
+          "tp": 171,
+          "fp": 124,
+          "tn": 626,
+          "fn": 577,
+          "precision": 0.5797,
+          "recall": 0.2286,
+          "f1": 0.3279,
+          "fpr": 0.1653,
+          "accuracy": 0.532
+        },
+        "fusion": {
+          "n": 1498,
+          "tp": 173,
+          "fp": 130,
+          "tn": 620,
+          "fn": 575,
+          "precision": 0.571,
+          "recall": 0.2313,
+          "f1": 0.3292,
+          "fpr": 0.1733,
+          "accuracy": 0.5294
+        }
+      },
+      "sast_flagged": {
+        "n": 303,
+        "vulnerable": 173,
+        "fixed": 130,
+        "sast": {
+          "n": 303,
+          "tp": 173,
+          "fp": 130,
+          "tn": 0,
+          "fn": 0,
+          "precision": 0.571,
+          "recall": 1.0,
+          "f1": 0.7269,
+          "fpr": 1.0,
+          "accuracy": 0.571
+        },
+        "board": {
+          "n": 303,
+          "tp": 171,
+          "fp": 124,
+          "tn": 6,
+          "fn": 2,
+          "precision": 0.5797,
+          "recall": 0.9884,
+          "f1": 0.7308,
+          "fpr": 0.9538,
+          "accuracy": 0.5842
+        },
+        "fusion": {
+          "n": 303,
+          "tp": 173,
+          "fp": 130,
+          "tn": 0,
+          "fn": 0,
+          "precision": 0.571,
+          "recall": 1.0,
+          "f1": 0.7269,
+          "fpr": 1.0,
+          "accuracy": 0.571
+        },
+        "board_false_positives_removed": 0.0462,
+        "board_true_positives_kept": 0.9884,
+        "fusion_false_positives_removed": 0.0,
+        "fusion_true_positives_kept": 1.0
+      },
+      "pairwise": {
+        "sast": {
+          "pairs": 748,
+          "P-C": 50,
+          "P-V": 123,
+          "P-B": 568,
+          "P-R": 7,
+          "P-C_rate": 0.0668,
+          "P-V_rate": 0.1644,
+          "P-B_rate": 0.7594,
+          "P-R_rate": 0.0094
+        },
+        "board": {
+          "pairs": 748,
+          "P-C": 55,
+          "P-V": 116,
+          "P-B": 569,
+          "P-R": 8,
+          "P-C_rate": 0.0735,
+          "P-V_rate": 0.1551,
+          "P-B_rate": 0.7607,
+          "P-R_rate": 0.0107
+        },
+        "fusion": {
+          "pairs": 748,
+          "P-C": 50,
+          "P-V": 123,
+          "P-B": 568,
+          "P-R": 7,
+          "P-C_rate": 0.0668,
+          "P-V_rate": 0.1644,
+          "P-B_rate": 0.7594,
+          "P-R_rate": 0.0094
+        }
+      },
+      "board_telemetry": {
+        "findings": 530,
+        "cpg_success_rate": 1.0,
+        "cpg_taint_found_rate": 0.0,
+        "rag_context_rate": 1.0,
+        "judge_false_positive_rate": 0.0642,
+        "evidence_grounded_rate": 0.1075,
+        "evidence_rule_override_rate": 0.0321,
+        "by_tool": {
+          "bandit": 389,
+          "semgrep": 141
+        }
+      },
+      "per_cwe": {
+        "CWE-78": {
+          "samples": 114,
+          "flagged": 53,
+          "sast": {
+            "n": 114,
+            "tp": 25,
+            "fp": 28,
+            "tn": 29,
+            "fn": 32,
+            "precision": 0.4717,
+            "recall": 0.4386,
+            "f1": 0.4545,
+            "fpr": 0.4912,
+            "accuracy": 0.4737
+          },
+          "board": {
+            "n": 114,
+            "tp": 25,
+            "fp": 25,
+            "tn": 32,
+            "fn": 32,
+            "precision": 0.5,
+            "recall": 0.4386,
+            "f1": 0.4673,
+            "fpr": 0.4386,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 114,
+            "tp": 25,
+            "fp": 28,
+            "tn": 29,
+            "fn": 32,
+            "precision": 0.4717,
+            "recall": 0.4386,
+            "f1": 0.4545,
+            "fpr": 0.4912,
+            "accuracy": 0.4737
+          }
+        },
+        "CWE-89": {
+          "samples": 106,
+          "flagged": 45,
+          "sast": {
+            "n": 106,
+            "tp": 32,
+            "fp": 13,
+            "tn": 40,
+            "fn": 21,
+            "precision": 0.7111,
+            "recall": 0.6038,
+            "f1": 0.6531,
+            "fpr": 0.2453,
+            "accuracy": 0.6792
+          },
+          "board": {
+            "n": 106,
+            "tp": 32,
+            "fp": 13,
+            "tn": 40,
+            "fn": 21,
+            "precision": 0.7111,
+            "recall": 0.6038,
+            "f1": 0.6531,
+            "fpr": 0.2453,
+            "accuracy": 0.6792
+          },
+          "fusion": {
+            "n": 106,
+            "tp": 32,
+            "fp": 13,
+            "tn": 40,
+            "fn": 21,
+            "precision": 0.7111,
+            "recall": 0.6038,
+            "f1": 0.6531,
+            "fpr": 0.2453,
+            "accuracy": 0.6792
+          }
+        },
+        "CWE-94": {
+          "samples": 105,
+          "flagged": 19,
+          "sast": {
+            "n": 105,
+            "tp": 12,
+            "fp": 7,
+            "tn": 46,
+            "fn": 40,
+            "precision": 0.6316,
+            "recall": 0.2308,
+            "f1": 0.338,
+            "fpr": 0.1321,
+            "accuracy": 0.5524
+          },
+          "board": {
+            "n": 105,
+            "tp": 11,
+            "fp": 7,
+            "tn": 46,
+            "fn": 41,
+            "precision": 0.6111,
+            "recall": 0.2115,
+            "f1": 0.3143,
+            "fpr": 0.1321,
+            "accuracy": 0.5429
+          },
+          "fusion": {
+            "n": 105,
+            "tp": 12,
+            "fp": 7,
+            "tn": 46,
+            "fn": 40,
+            "precision": 0.6316,
+            "recall": 0.2308,
+            "f1": 0.338,
+            "fpr": 0.1321,
+            "accuracy": 0.5524
+          }
+        },
+        "CWE-352": {
+          "samples": 100,
+          "flagged": 11,
+          "sast": {
+            "n": 100,
+            "tp": 6,
+            "fp": 5,
+            "tn": 45,
+            "fn": 44,
+            "precision": 0.5455,
+            "recall": 0.12,
+            "f1": 0.1967,
+            "fpr": 0.1,
+            "accuracy": 0.51
+          },
+          "board": {
+            "n": 100,
+            "tp": 6,
+            "fp": 4,
+            "tn": 46,
+            "fn": 44,
+            "precision": 0.6,
+            "recall": 0.12,
+            "f1": 0.2,
+            "fpr": 0.08,
+            "accuracy": 0.52
+          },
+          "fusion": {
+            "n": 100,
+            "tp": 6,
+            "fp": 5,
+            "tn": 45,
+            "fn": 44,
+            "precision": 0.5455,
+            "recall": 0.12,
+            "f1": 0.1967,
+            "fpr": 0.1,
+            "accuracy": 0.51
+          }
+        },
+        "CWE-601": {
+          "samples": 96,
+          "flagged": 22,
+          "sast": {
+            "n": 96,
+            "tp": 12,
+            "fp": 10,
+            "tn": 38,
+            "fn": 36,
+            "precision": 0.5455,
+            "recall": 0.25,
+            "f1": 0.3429,
+            "fpr": 0.2083,
+            "accuracy": 0.5208
+          },
+          "board": {
+            "n": 96,
+            "tp": 12,
+            "fp": 10,
+            "tn": 38,
+            "fn": 36,
+            "precision": 0.5455,
+            "recall": 0.25,
+            "f1": 0.3429,
+            "fpr": 0.2083,
+            "accuracy": 0.5208
+          },
+          "fusion": {
+            "n": 96,
+            "tp": 12,
+            "fp": 10,
+            "tn": 38,
+            "fn": 36,
+            "precision": 0.5455,
+            "recall": 0.25,
+            "f1": 0.3429,
+            "fpr": 0.2083,
+            "accuracy": 0.5208
+          }
+        },
+        "CWE-22": {
+          "samples": 88,
+          "flagged": 10,
+          "sast": {
+            "n": 88,
+            "tp": 5,
+            "fp": 5,
+            "tn": 39,
+            "fn": 39,
+            "precision": 0.5,
+            "recall": 0.1136,
+            "f1": 0.1852,
+            "fpr": 0.1136,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 88,
+            "tp": 5,
+            "fp": 5,
+            "tn": 39,
+            "fn": 39,
+            "precision": 0.5,
+            "recall": 0.1136,
+            "f1": 0.1852,
+            "fpr": 0.1136,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 88,
+            "tp": 5,
+            "fp": 5,
+            "tn": 39,
+            "fn": 39,
+            "precision": 0.5,
+            "recall": 0.1136,
+            "f1": 0.1852,
+            "fpr": 0.1136,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-79": {
+          "samples": 59,
+          "flagged": 9,
+          "sast": {
+            "n": 59,
+            "tp": 6,
+            "fp": 3,
+            "tn": 27,
+            "fn": 23,
+            "precision": 0.6667,
+            "recall": 0.2069,
+            "f1": 0.3158,
+            "fpr": 0.1,
+            "accuracy": 0.5593
+          },
+          "board": {
+            "n": 59,
+            "tp": 6,
+            "fp": 3,
+            "tn": 27,
+            "fn": 23,
+            "precision": 0.6667,
+            "recall": 0.2069,
+            "f1": 0.3158,
+            "fpr": 0.1,
+            "accuracy": 0.5593
+          },
+          "fusion": {
+            "n": 59,
+            "tp": 6,
+            "fp": 3,
+            "tn": 27,
+            "fn": 23,
+            "precision": 0.6667,
+            "recall": 0.2069,
+            "f1": 0.3158,
+            "fpr": 0.1,
+            "accuracy": 0.5593
+          }
+        },
+        "CWE-918": {
+          "samples": 44,
+          "flagged": 8,
+          "sast": {
+            "n": 44,
+            "tp": 4,
+            "fp": 4,
+            "tn": 18,
+            "fn": 18,
+            "precision": 0.5,
+            "recall": 0.1818,
+            "f1": 0.2667,
+            "fpr": 0.1818,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 44,
+            "tp": 4,
+            "fp": 4,
+            "tn": 18,
+            "fn": 18,
+            "precision": 0.5,
+            "recall": 0.1818,
+            "f1": 0.2667,
+            "fpr": 0.1818,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 44,
+            "tp": 4,
+            "fp": 4,
+            "tn": 18,
+            "fn": 18,
+            "precision": 0.5,
+            "recall": 0.1818,
+            "f1": 0.2667,
+            "fpr": 0.1818,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-20": {
+          "samples": 36,
+          "flagged": 1,
+          "sast": {
+            "n": 36,
+            "tp": 1,
+            "fp": 0,
+            "tn": 18,
+            "fn": 17,
+            "precision": 1.0,
+            "recall": 0.0556,
+            "f1": 0.1053,
+            "fpr": 0.0,
+            "accuracy": 0.5278
+          },
+          "board": {
+            "n": 36,
+            "tp": 1,
+            "fp": 0,
+            "tn": 18,
+            "fn": 17,
+            "precision": 1.0,
+            "recall": 0.0556,
+            "f1": 0.1053,
+            "fpr": 0.0,
+            "accuracy": 0.5278
+          },
+          "fusion": {
+            "n": 36,
+            "tp": 1,
+            "fp": 0,
+            "tn": 18,
+            "fn": 17,
+            "precision": 1.0,
+            "recall": 0.0556,
+            "f1": 0.1053,
+            "fpr": 0.0,
+            "accuracy": 0.5278
+          }
+        },
+        "CWE-203": {
+          "samples": 34,
+          "flagged": 4,
+          "sast": {
+            "n": 34,
+            "tp": 2,
+            "fp": 2,
+            "tn": 15,
+            "fn": 15,
+            "precision": 0.5,
+            "recall": 0.1176,
+            "f1": 0.1905,
+            "fpr": 0.1176,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 34,
+            "tp": 2,
+            "fp": 2,
+            "tn": 15,
+            "fn": 15,
+            "precision": 0.5,
+            "recall": 0.1176,
+            "f1": 0.1905,
+            "fpr": 0.1176,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 34,
+            "tp": 2,
+            "fp": 2,
+            "tn": 15,
+            "fn": 15,
+            "precision": 0.5,
+            "recall": 0.1176,
+            "f1": 0.1905,
+            "fpr": 0.1176,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-59": {
+          "samples": 30,
+          "flagged": 9,
+          "sast": {
+            "n": 30,
+            "tp": 6,
+            "fp": 3,
+            "tn": 12,
+            "fn": 9,
+            "precision": 0.6667,
+            "recall": 0.4,
+            "f1": 0.5,
+            "fpr": 0.2,
+            "accuracy": 0.6
+          },
+          "board": {
+            "n": 30,
+            "tp": 6,
+            "fp": 3,
+            "tn": 12,
+            "fn": 9,
+            "precision": 0.6667,
+            "recall": 0.4,
+            "f1": 0.5,
+            "fpr": 0.2,
+            "accuracy": 0.6
+          },
+          "fusion": {
+            "n": 30,
+            "tp": 6,
+            "fp": 3,
+            "tn": 12,
+            "fn": 9,
+            "precision": 0.6667,
+            "recall": 0.4,
+            "f1": 0.5,
+            "fpr": 0.2,
+            "accuracy": 0.6
+          }
+        },
+        "CWE-77": {
+          "samples": 30,
+          "flagged": 12,
+          "sast": {
+            "n": 30,
+            "tp": 6,
+            "fp": 6,
+            "tn": 9,
+            "fn": 9,
+            "precision": 0.5,
+            "recall": 0.4,
+            "f1": 0.4444,
+            "fpr": 0.4,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 30,
+            "tp": 6,
+            "fp": 6,
+            "tn": 9,
+            "fn": 9,
+            "precision": 0.5,
+            "recall": 0.4,
+            "f1": 0.4444,
+            "fpr": 0.4,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 30,
+            "tp": 6,
+            "fp": 6,
+            "tn": 9,
+            "fn": 9,
+            "precision": 0.5,
+            "recall": 0.4,
+            "f1": 0.4444,
+            "fpr": 0.4,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-502": {
+          "samples": 26,
+          "flagged": 18,
+          "sast": {
+            "n": 26,
+            "tp": 12,
+            "fp": 6,
+            "tn": 7,
+            "fn": 1,
+            "precision": 0.6667,
+            "recall": 0.9231,
+            "f1": 0.7742,
+            "fpr": 0.4615,
+            "accuracy": 0.7308
+          },
+          "board": {
+            "n": 26,
+            "tp": 12,
+            "fp": 6,
+            "tn": 7,
+            "fn": 1,
+            "precision": 0.6667,
+            "recall": 0.9231,
+            "f1": 0.7742,
+            "fpr": 0.4615,
+            "accuracy": 0.7308
+          },
+          "fusion": {
+            "n": 26,
+            "tp": 12,
+            "fp": 6,
+            "tn": 7,
+            "fn": 1,
+            "precision": 0.6667,
+            "recall": 0.9231,
+            "f1": 0.7742,
+            "fpr": 0.4615,
+            "accuracy": 0.7308
+          }
+        },
+        "CWE-863": {
+          "samples": 26,
+          "flagged": 0,
+          "sast": {
+            "n": 26,
+            "tp": 0,
+            "fp": 0,
+            "tn": 13,
+            "fn": 13,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 26,
+            "tp": 0,
+            "fp": 0,
+            "tn": 13,
+            "fn": 13,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 26,
+            "tp": 0,
+            "fp": 0,
+            "tn": 13,
+            "fn": 13,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-74": {
+          "samples": 24,
+          "flagged": 4,
+          "sast": {
+            "n": 24,
+            "tp": 2,
+            "fp": 2,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.5,
+            "recall": 0.1667,
+            "f1": 0.25,
+            "fpr": 0.1667,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 24,
+            "tp": 2,
+            "fp": 2,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.5,
+            "recall": 0.1667,
+            "f1": 0.25,
+            "fpr": 0.1667,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 24,
+            "tp": 2,
+            "fp": 2,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.5,
+            "recall": 0.1667,
+            "f1": 0.25,
+            "fpr": 0.1667,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-400": {
+          "samples": 24,
+          "flagged": 0,
+          "sast": {
+            "n": 24,
+            "tp": 0,
+            "fp": 0,
+            "tn": 12,
+            "fn": 12,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 24,
+            "tp": 0,
+            "fp": 0,
+            "tn": 12,
+            "fn": 12,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 24,
+            "tp": 0,
+            "fp": 0,
+            "tn": 12,
+            "fn": 12,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-unknown": {
+          "samples": 22,
+          "flagged": 2,
+          "sast": {
+            "n": 22,
+            "tp": 1,
+            "fp": 1,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.5,
+            "recall": 0.0909,
+            "f1": 0.1538,
+            "fpr": 0.0909,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 22,
+            "tp": 1,
+            "fp": 1,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.5,
+            "recall": 0.0909,
+            "f1": 0.1538,
+            "fpr": 0.0909,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 22,
+            "tp": 1,
+            "fp": 1,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.5,
+            "recall": 0.0909,
+            "f1": 0.1538,
+            "fpr": 0.0909,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-264": {
+          "samples": 22,
+          "flagged": 5,
+          "sast": {
+            "n": 22,
+            "tp": 3,
+            "fp": 2,
+            "tn": 9,
+            "fn": 8,
+            "precision": 0.6,
+            "recall": 0.2727,
+            "f1": 0.375,
+            "fpr": 0.1818,
+            "accuracy": 0.5455
+          },
+          "board": {
+            "n": 22,
+            "tp": 3,
+            "fp": 2,
+            "tn": 9,
+            "fn": 8,
+            "precision": 0.6,
+            "recall": 0.2727,
+            "f1": 0.375,
+            "fpr": 0.1818,
+            "accuracy": 0.5455
+          },
+          "fusion": {
+            "n": 22,
+            "tp": 3,
+            "fp": 2,
+            "tn": 9,
+            "fn": 8,
+            "precision": 0.6,
+            "recall": 0.2727,
+            "f1": 0.375,
+            "fpr": 0.1818,
+            "accuracy": 0.5455
+          }
+        },
+        "CWE-770": {
+          "samples": 22,
+          "flagged": 4,
+          "sast": {
+            "n": 22,
+            "tp": 2,
+            "fp": 2,
+            "tn": 9,
+            "fn": 9,
+            "precision": 0.5,
+            "recall": 0.1818,
+            "f1": 0.2667,
+            "fpr": 0.1818,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 22,
+            "tp": 2,
+            "fp": 2,
+            "tn": 9,
+            "fn": 9,
+            "precision": 0.5,
+            "recall": 0.1818,
+            "f1": 0.2667,
+            "fpr": 0.1818,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 22,
+            "tp": 2,
+            "fp": 2,
+            "tn": 9,
+            "fn": 9,
+            "precision": 0.5,
+            "recall": 0.1818,
+            "f1": 0.2667,
+            "fpr": 0.1818,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-29": {
+          "samples": 20,
+          "flagged": 0,
+          "sast": {
+            "n": 20,
+            "tp": 0,
+            "fp": 0,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 20,
+            "tp": 0,
+            "fp": 0,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 20,
+            "tp": 0,
+            "fp": 0,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-269": {
+          "samples": 20,
+          "flagged": 6,
+          "sast": {
+            "n": 20,
+            "tp": 3,
+            "fp": 3,
+            "tn": 7,
+            "fn": 7,
+            "precision": 0.5,
+            "recall": 0.3,
+            "f1": 0.375,
+            "fpr": 0.3,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 20,
+            "tp": 3,
+            "fp": 3,
+            "tn": 7,
+            "fn": 7,
+            "precision": 0.5,
+            "recall": 0.3,
+            "f1": 0.375,
+            "fpr": 0.3,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 20,
+            "tp": 3,
+            "fp": 3,
+            "tn": 7,
+            "fn": 7,
+            "precision": 0.5,
+            "recall": 0.3,
+            "f1": 0.375,
+            "fpr": 0.3,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-532": {
+          "samples": 20,
+          "flagged": 4,
+          "sast": {
+            "n": 20,
+            "tp": 2,
+            "fp": 2,
+            "tn": 8,
+            "fn": 8,
+            "precision": 0.5,
+            "recall": 0.2,
+            "f1": 0.2857,
+            "fpr": 0.2,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 20,
+            "tp": 2,
+            "fp": 2,
+            "tn": 8,
+            "fn": 8,
+            "precision": 0.5,
+            "recall": 0.2,
+            "f1": 0.2857,
+            "fpr": 0.2,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 20,
+            "tp": 2,
+            "fp": 2,
+            "tn": 8,
+            "fn": 8,
+            "precision": 0.5,
+            "recall": 0.2,
+            "f1": 0.2857,
+            "fpr": 0.2,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-200": {
+          "samples": 20,
+          "flagged": 0,
+          "sast": {
+            "n": 20,
+            "tp": 0,
+            "fp": 0,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 20,
+            "tp": 0,
+            "fp": 0,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 20,
+            "tp": 0,
+            "fp": 0,
+            "tn": 10,
+            "fn": 10,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-287": {
+          "samples": 16,
+          "flagged": 1,
+          "sast": {
+            "n": 16,
+            "tp": 1,
+            "fp": 0,
+            "tn": 8,
+            "fn": 7,
+            "precision": 1.0,
+            "recall": 0.125,
+            "f1": 0.2222,
+            "fpr": 0.0,
+            "accuracy": 0.5625
+          },
+          "board": {
+            "n": 16,
+            "tp": 1,
+            "fp": 0,
+            "tn": 8,
+            "fn": 7,
+            "precision": 1.0,
+            "recall": 0.125,
+            "f1": 0.2222,
+            "fpr": 0.0,
+            "accuracy": 0.5625
+          },
+          "fusion": {
+            "n": 16,
+            "tp": 1,
+            "fp": 0,
+            "tn": 8,
+            "fn": 7,
+            "precision": 1.0,
+            "recall": 0.125,
+            "f1": 0.2222,
+            "fpr": 0.0,
+            "accuracy": 0.5625
+          }
+        },
+        "CWE-295": {
+          "samples": 14,
+          "flagged": 2,
+          "sast": {
+            "n": 14,
+            "tp": 1,
+            "fp": 1,
+            "tn": 6,
+            "fn": 6,
+            "precision": 0.5,
+            "recall": 0.1429,
+            "f1": 0.2222,
+            "fpr": 0.1429,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 14,
+            "tp": 1,
+            "fp": 1,
+            "tn": 6,
+            "fn": 6,
+            "precision": 0.5,
+            "recall": 0.1429,
+            "f1": 0.2222,
+            "fpr": 0.1429,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 14,
+            "tp": 1,
+            "fp": 1,
+            "tn": 6,
+            "fn": 6,
+            "precision": 0.5,
+            "recall": 0.1429,
+            "f1": 0.2222,
+            "fpr": 0.1429,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-674": {
+          "samples": 14,
+          "flagged": 0,
+          "sast": {
+            "n": 14,
+            "tp": 0,
+            "fp": 0,
+            "tn": 7,
+            "fn": 7,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 14,
+            "tp": 0,
+            "fp": 0,
+            "tn": 7,
+            "fn": 7,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 14,
+            "tp": 0,
+            "fp": 0,
+            "tn": 7,
+            "fn": 7,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-209": {
+          "samples": 14,
+          "flagged": 2,
+          "sast": {
+            "n": 14,
+            "tp": 1,
+            "fp": 1,
+            "tn": 6,
+            "fn": 6,
+            "precision": 0.5,
+            "recall": 0.1429,
+            "f1": 0.2222,
+            "fpr": 0.1429,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 14,
+            "tp": 1,
+            "fp": 0,
+            "tn": 7,
+            "fn": 6,
+            "precision": 1.0,
+            "recall": 0.1429,
+            "f1": 0.25,
+            "fpr": 0.0,
+            "accuracy": 0.5714
+          },
+          "fusion": {
+            "n": 14,
+            "tp": 1,
+            "fp": 1,
+            "tn": 6,
+            "fn": 6,
+            "precision": 0.5,
+            "recall": 0.1429,
+            "f1": 0.2222,
+            "fpr": 0.1429,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-1333": {
+          "samples": 14,
+          "flagged": 1,
+          "sast": {
+            "n": 14,
+            "tp": 0,
+            "fp": 1,
+            "tn": 6,
+            "fn": 7,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.1429,
+            "accuracy": 0.4286
+          },
+          "board": {
+            "n": 14,
+            "tp": 0,
+            "fp": 1,
+            "tn": 6,
+            "fn": 7,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.1429,
+            "accuracy": 0.4286
+          },
+          "fusion": {
+            "n": 14,
+            "tp": 0,
+            "fp": 1,
+            "tn": 6,
+            "fn": 7,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.1429,
+            "accuracy": 0.4286
+          }
+        },
+        "CWE-362": {
+          "samples": 12,
+          "flagged": 3,
+          "sast": {
+            "n": 12,
+            "tp": 1,
+            "fp": 2,
+            "tn": 4,
+            "fn": 5,
+            "precision": 0.3333,
+            "recall": 0.1667,
+            "f1": 0.2222,
+            "fpr": 0.3333,
+            "accuracy": 0.4167
+          },
+          "board": {
+            "n": 12,
+            "tp": 1,
+            "fp": 2,
+            "tn": 4,
+            "fn": 5,
+            "precision": 0.3333,
+            "recall": 0.1667,
+            "f1": 0.2222,
+            "fpr": 0.3333,
+            "accuracy": 0.4167
+          },
+          "fusion": {
+            "n": 12,
+            "tp": 1,
+            "fp": 2,
+            "tn": 4,
+            "fn": 5,
+            "precision": 0.3333,
+            "recall": 0.1667,
+            "f1": 0.2222,
+            "fpr": 0.3333,
+            "accuracy": 0.4167
+          }
+        },
+        "CWE-611": {
+          "samples": 12,
+          "flagged": 5,
+          "sast": {
+            "n": 12,
+            "tp": 3,
+            "fp": 2,
+            "tn": 4,
+            "fn": 3,
+            "precision": 0.6,
+            "recall": 0.5,
+            "f1": 0.5455,
+            "fpr": 0.3333,
+            "accuracy": 0.5833
+          },
+          "board": {
+            "n": 12,
+            "tp": 2,
+            "fp": 1,
+            "tn": 5,
+            "fn": 4,
+            "precision": 0.6667,
+            "recall": 0.3333,
+            "f1": 0.4444,
+            "fpr": 0.1667,
+            "accuracy": 0.5833
+          },
+          "fusion": {
+            "n": 12,
+            "tp": 3,
+            "fp": 2,
+            "tn": 4,
+            "fn": 3,
+            "precision": 0.6,
+            "recall": 0.5,
+            "f1": 0.5455,
+            "fpr": 0.3333,
+            "accuracy": 0.5833
+          }
+        },
+        "CWE-787": {
+          "samples": 12,
+          "flagged": 8,
+          "sast": {
+            "n": 12,
+            "tp": 4,
+            "fp": 4,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.5,
+            "recall": 0.6667,
+            "f1": 0.5714,
+            "fpr": 0.6667,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 12,
+            "tp": 4,
+            "fp": 4,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.5,
+            "recall": 0.6667,
+            "f1": 0.5714,
+            "fpr": 0.6667,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 12,
+            "tp": 4,
+            "fp": 4,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.5,
+            "recall": 0.6667,
+            "f1": 0.5714,
+            "fpr": 0.6667,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-1021": {
+          "samples": 12,
+          "flagged": 0,
+          "sast": {
+            "n": 12,
+            "tp": 0,
+            "fp": 0,
+            "tn": 6,
+            "fn": 6,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 12,
+            "tp": 0,
+            "fp": 0,
+            "tn": 6,
+            "fn": 6,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 12,
+            "tp": 0,
+            "fp": 0,
+            "tn": 6,
+            "fn": 6,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-331": {
+          "samples": 10,
+          "flagged": 4,
+          "sast": {
+            "n": 10,
+            "tp": 2,
+            "fp": 2,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.4,
+            "f1": 0.4444,
+            "fpr": 0.4,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 10,
+            "tp": 2,
+            "fp": 2,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.4,
+            "f1": 0.4444,
+            "fpr": 0.4,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 10,
+            "tp": 2,
+            "fp": 2,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.4,
+            "f1": 0.4444,
+            "fpr": 0.4,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-310": {
+          "samples": 10,
+          "flagged": 0,
+          "sast": {
+            "n": 10,
+            "tp": 0,
+            "fp": 0,
+            "tn": 5,
+            "fn": 5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 10,
+            "tp": 0,
+            "fp": 0,
+            "tn": 5,
+            "fn": 5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 10,
+            "tp": 0,
+            "fp": 0,
+            "tn": 5,
+            "fn": 5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-312": {
+          "samples": 10,
+          "flagged": 0,
+          "sast": {
+            "n": 10,
+            "tp": 0,
+            "fp": 0,
+            "tn": 5,
+            "fn": 5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 10,
+            "tp": 0,
+            "fp": 0,
+            "tn": 5,
+            "fn": 5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 10,
+            "tp": 0,
+            "fp": 0,
+            "tn": 5,
+            "fn": 5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-668": {
+          "samples": 10,
+          "flagged": 2,
+          "sast": {
+            "n": 10,
+            "tp": 2,
+            "fp": 0,
+            "tn": 5,
+            "fn": 3,
+            "precision": 1.0,
+            "recall": 0.4,
+            "f1": 0.5714,
+            "fpr": 0.0,
+            "accuracy": 0.7
+          },
+          "board": {
+            "n": 10,
+            "tp": 2,
+            "fp": 0,
+            "tn": 5,
+            "fn": 3,
+            "precision": 1.0,
+            "recall": 0.4,
+            "f1": 0.5714,
+            "fpr": 0.0,
+            "accuracy": 0.7
+          },
+          "fusion": {
+            "n": 10,
+            "tp": 2,
+            "fp": 0,
+            "tn": 5,
+            "fn": 3,
+            "precision": 1.0,
+            "recall": 0.4,
+            "f1": 0.5714,
+            "fpr": 0.0,
+            "accuracy": 0.7
+          }
+        },
+        "CWE-306": {
+          "samples": 10,
+          "flagged": 0,
+          "sast": {
+            "n": 10,
+            "tp": 0,
+            "fp": 0,
+            "tn": 5,
+            "fn": 5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 10,
+            "tp": 0,
+            "fp": 0,
+            "tn": 5,
+            "fn": 5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 10,
+            "tp": 0,
+            "fp": 0,
+            "tn": 5,
+            "fn": 5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-116": {
+          "samples": 8,
+          "flagged": 2,
+          "sast": {
+            "n": 8,
+            "tp": 1,
+            "fp": 1,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.25,
+            "f1": 0.3333,
+            "fpr": 0.25,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 8,
+            "tp": 1,
+            "fp": 1,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.25,
+            "f1": 0.3333,
+            "fpr": 0.25,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 8,
+            "tp": 1,
+            "fp": 1,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.25,
+            "f1": 0.3333,
+            "fpr": 0.25,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-93": {
+          "samples": 8,
+          "flagged": 0,
+          "sast": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-670": {
+          "samples": 8,
+          "flagged": 2,
+          "sast": {
+            "n": 8,
+            "tp": 1,
+            "fp": 1,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.25,
+            "f1": 0.3333,
+            "fpr": 0.25,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 8,
+            "tp": 1,
+            "fp": 1,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.25,
+            "f1": 0.3333,
+            "fpr": 0.25,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 8,
+            "tp": 1,
+            "fp": 1,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.25,
+            "f1": 0.3333,
+            "fpr": 0.25,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-290": {
+          "samples": 8,
+          "flagged": 0,
+          "sast": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-789": {
+          "samples": 8,
+          "flagged": 0,
+          "sast": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-284": {
+          "samples": 8,
+          "flagged": 2,
+          "sast": {
+            "n": 8,
+            "tp": 1,
+            "fp": 1,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.25,
+            "f1": 0.3333,
+            "fpr": 0.25,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 8,
+            "tp": 1,
+            "fp": 1,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.25,
+            "f1": 0.3333,
+            "fpr": 0.25,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 8,
+            "tp": 1,
+            "fp": 1,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.5,
+            "recall": 0.25,
+            "f1": 0.3333,
+            "fpr": 0.25,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-73": {
+          "samples": 8,
+          "flagged": 0,
+          "sast": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-697": {
+          "samples": 8,
+          "flagged": 0,
+          "sast": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 8,
+            "tp": 0,
+            "fp": 0,
+            "tn": 4,
+            "fn": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-212": {
+          "samples": 6,
+          "flagged": 0,
+          "sast": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-19": {
+          "samples": 6,
+          "flagged": 1,
+          "sast": {
+            "n": 6,
+            "tp": 1,
+            "fp": 0,
+            "tn": 3,
+            "fn": 2,
+            "precision": 1.0,
+            "recall": 0.3333,
+            "f1": 0.5,
+            "fpr": 0.0,
+            "accuracy": 0.6667
+          },
+          "board": {
+            "n": 6,
+            "tp": 1,
+            "fp": 0,
+            "tn": 3,
+            "fn": 2,
+            "precision": 1.0,
+            "recall": 0.3333,
+            "f1": 0.5,
+            "fpr": 0.0,
+            "accuracy": 0.6667
+          },
+          "fusion": {
+            "n": 6,
+            "tp": 1,
+            "fp": 0,
+            "tn": 3,
+            "fn": 2,
+            "precision": 1.0,
+            "recall": 0.3333,
+            "f1": 0.5,
+            "fpr": 0.0,
+            "accuracy": 0.6667
+          }
+        },
+        "CWE-693": {
+          "samples": 6,
+          "flagged": 0,
+          "sast": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-254": {
+          "samples": 6,
+          "flagged": 0,
+          "sast": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-521": {
+          "samples": 6,
+          "flagged": 2,
+          "sast": {
+            "n": 6,
+            "tp": 1,
+            "fp": 1,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.5,
+            "recall": 0.3333,
+            "f1": 0.4,
+            "fpr": 0.3333,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 6,
+            "tp": 1,
+            "fp": 1,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.5,
+            "recall": 0.3333,
+            "f1": 0.4,
+            "fpr": 0.3333,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 6,
+            "tp": 1,
+            "fp": 1,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.5,
+            "recall": 0.3333,
+            "f1": 0.4,
+            "fpr": 0.3333,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-134": {
+          "samples": 6,
+          "flagged": 0,
+          "sast": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-776": {
+          "samples": 6,
+          "flagged": 1,
+          "sast": {
+            "n": 6,
+            "tp": 1,
+            "fp": 0,
+            "tn": 3,
+            "fn": 2,
+            "precision": 1.0,
+            "recall": 0.3333,
+            "f1": 0.5,
+            "fpr": 0.0,
+            "accuracy": 0.6667
+          },
+          "board": {
+            "n": 6,
+            "tp": 1,
+            "fp": 0,
+            "tn": 3,
+            "fn": 2,
+            "precision": 1.0,
+            "recall": 0.3333,
+            "f1": 0.5,
+            "fpr": 0.0,
+            "accuracy": 0.6667
+          },
+          "fusion": {
+            "n": 6,
+            "tp": 1,
+            "fp": 0,
+            "tn": 3,
+            "fn": 2,
+            "precision": 1.0,
+            "recall": 0.3333,
+            "f1": 0.5,
+            "fpr": 0.0,
+            "accuracy": 0.6667
+          }
+        },
+        "CWE-367": {
+          "samples": 6,
+          "flagged": 0,
+          "sast": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-330": {
+          "samples": 6,
+          "flagged": 5,
+          "sast": {
+            "n": 6,
+            "tp": 2,
+            "fp": 3,
+            "tn": 0,
+            "fn": 1,
+            "precision": 0.4,
+            "recall": 0.6667,
+            "f1": 0.5,
+            "fpr": 1.0,
+            "accuracy": 0.3333
+          },
+          "board": {
+            "n": 6,
+            "tp": 2,
+            "fp": 3,
+            "tn": 0,
+            "fn": 1,
+            "precision": 0.4,
+            "recall": 0.6667,
+            "f1": 0.5,
+            "fpr": 1.0,
+            "accuracy": 0.3333
+          },
+          "fusion": {
+            "n": 6,
+            "tp": 2,
+            "fp": 3,
+            "tn": 0,
+            "fn": 1,
+            "precision": 0.4,
+            "recall": 0.6667,
+            "f1": 0.5,
+            "fpr": 1.0,
+            "accuracy": 0.3333
+          }
+        },
+        "CWE-354": {
+          "samples": 6,
+          "flagged": 0,
+          "sast": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 6,
+            "tp": 0,
+            "fp": 0,
+            "tn": 3,
+            "fn": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-835": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-307": {
+          "samples": 4,
+          "flagged": 2,
+          "sast": {
+            "n": 4,
+            "tp": 1,
+            "fp": 1,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1": 0.5,
+            "fpr": 0.5,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 1,
+            "fp": 1,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1": 0.5,
+            "fpr": 0.5,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 1,
+            "fp": 1,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1": 0.5,
+            "fpr": 0.5,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-347": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-1236": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-311": {
+          "samples": 4,
+          "flagged": 2,
+          "sast": {
+            "n": 4,
+            "tp": 1,
+            "fp": 1,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1": 0.5,
+            "fpr": 0.5,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 1,
+            "fp": 1,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1": 0.5,
+            "fpr": 0.5,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 1,
+            "fp": 1,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1": 0.5,
+            "fpr": 0.5,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-359": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-215": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-252": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-255": {
+          "samples": 4,
+          "flagged": 2,
+          "sast": {
+            "n": 4,
+            "tp": 1,
+            "fp": 1,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1": 0.5,
+            "fpr": 0.5,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 1,
+            "fp": 1,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1": 0.5,
+            "fpr": 0.5,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 1,
+            "fp": 1,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1": 0.5,
+            "fpr": 0.5,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-319": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-921": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-23": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-862": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-366": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-444": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-285": {
+          "samples": 4,
+          "flagged": 4,
+          "sast": {
+            "n": 4,
+            "tp": 2,
+            "fp": 2,
+            "tn": 0,
+            "fn": 0,
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6667,
+            "fpr": 1.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 2,
+            "fp": 2,
+            "tn": 0,
+            "fn": 0,
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6667,
+            "fpr": 1.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 2,
+            "fp": 2,
+            "tn": 0,
+            "fn": 0,
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6667,
+            "fpr": 1.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-667": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-640": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-327": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-434": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-36": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-120": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-613": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-416": {
+          "samples": 4,
+          "flagged": 0,
+          "sast": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 4,
+            "tp": 0,
+            "fp": 0,
+            "tn": 2,
+            "fn": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-1284": {
+          "samples": 2,
+          "flagged": 0,
+          "sast": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-755": {
+          "samples": 2,
+          "flagged": 2,
+          "sast": {
+            "n": 2,
+            "tp": 1,
+            "fp": 1,
+            "tn": 0,
+            "fn": 0,
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6667,
+            "fpr": 1.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 2,
+            "tp": 1,
+            "fp": 1,
+            "tn": 0,
+            "fn": 0,
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6667,
+            "fpr": 1.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 2,
+            "tp": 1,
+            "fp": 1,
+            "tn": 0,
+            "fn": 0,
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6667,
+            "fpr": 1.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-346": {
+          "samples": 2,
+          "flagged": 0,
+          "sast": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-707": {
+          "samples": 2,
+          "flagged": 0,
+          "sast": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-172": {
+          "samples": 2,
+          "flagged": 0,
+          "sast": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-377": {
+          "samples": 2,
+          "flagged": 1,
+          "sast": {
+            "n": 2,
+            "tp": 1,
+            "fp": 0,
+            "tn": 1,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "fpr": 0.0,
+            "accuracy": 1.0
+          },
+          "board": {
+            "n": 2,
+            "tp": 1,
+            "fp": 0,
+            "tn": 1,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "fpr": 0.0,
+            "accuracy": 1.0
+          },
+          "fusion": {
+            "n": 2,
+            "tp": 1,
+            "fp": 0,
+            "tn": 1,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "fpr": 0.0,
+            "accuracy": 1.0
+          }
+        },
+        "CWE-427": {
+          "samples": 2,
+          "flagged": 0,
+          "sast": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-522": {
+          "samples": 2,
+          "flagged": 0,
+          "sast": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-732": {
+          "samples": 2,
+          "flagged": 0,
+          "sast": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "board": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          },
+          "fusion": {
+            "n": 2,
+            "tp": 0,
+            "fp": 0,
+            "tn": 1,
+            "fn": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "fpr": 0.0,
+            "accuracy": 0.5
+          }
+        },
+        "CWE-1336": {
+          "samples": 2,
+          "flagged": 1,
+          "sast": {
+            "n": 2,
+            "tp": 1,
+            "fp": 0,
+            "tn": 1,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "fpr": 0.0,
+            "accuracy": 1.0
+          },
+          "board": {
+            "n": 2,
+            "tp": 1,
+            "fp": 0,
+            "tn": 1,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "fpr": 0.0,
+            "accuracy": 1.0
+          },
+          "fusion": {
+            "n": 2,
+            "tp": 1,
+            "fp": 0,
+            "tn": 1,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "fpr": 0.0,
+            "accuracy": 1.0
+          }
+        }
+      }
+    }
+  },
+  "caveats": [
+    "Labels follow CVEfixes: a function changed by a security-fix commit is vulnerable before the fix and fixed after it. Tangled commits (> REALWORLD_MAX_FUNCS_PER_COMMIT functions) are excluded, but some label noise remains.",
+    "The board only reasons about static-analysis findings, so end-to-end recall cannot exceed Semgrep + Bandit recall. The sast_flagged view isolates the board's contribution.",
+    "The fusion classifier was not trained on real board outputs; treat the fusion row as provisional.",
+    "VUDENC commits are keyword-mined and noisier than CVE-linked CVEfixes commits; compare within, not across, datasets."
+  ],
+  "provenance": {
+    "timestamp": "2026-09-28T07:32:11",
+    "git_commit": "unknown",
+    "models": {
+      "attacker": "qwen2.5-coder:14b",
+      "defender": "qwen2.5-coder:14b",
+      "judge": "qwen2.5-coder:14b",
+      "patcher": "qwen2.5-coder:14b"
+    },
+    "num_ctx": 4096,
+    "temperatures": {
+      "attacker": 0.6,
+      "defender": 0.5,
+      "judge": 0.0
+    },
+    "evidence_rule_min_span": 8,
+    "decision_thresholds": {
+      "single_pass_confidence": 0.5,
+      "fusion_probability": 0.4,
+      "evidence_rule_override_floor": 0.5
+    },
+    "ollama_base_url": "http://ollama:11434",
+    "repo_commit": "42b9caf",
+    "max_funcs_per_commit": "4",
+    "seed": "42",
+    "cpg_enabled": "1"
+  },
+  "baseline_metrics": {
+    "n": 1498,
+    "tp": 173,
+    "fp": 130,
+    "tn": 620,
+    "fn": 575,
+    "precision": 0.571,
+    "recall": 0.2313,
+    "f1": 0.3292,
+    "fpr": 0.1733,
+    "accuracy": 0.5294
+  },
+  "hackersec_metrics": {
+    "n": 1498,
+    "tp": 171,
+    "fp": 124,
+    "tn": 626,
+    "fn": 577,
+    "precision": 0.5797,
+    "recall": 0.2286,
+    "f1": 0.3279,
+    "fpr": 0.1653,
+    "accuracy": 0.532
+  },
+  "markdown": "# HackerSec real-world evaluation (2026-09-28T07:32:11)\n\nStatus: **complete** — 1498/1500 samples evaluated (100.0%), 2 LLM failures, 0 errors.\n\n## cvefixes — 999 functions, 500 pairs\n\n**End-to-end** (recall capped by static analysis)\n\n| System | Precision | Recall | F1 | FPR | Accuracy |\n|---|---|---|---|---|---|\n| Semgrep + Bandit (baseline) | 0.573 | 0.220 | 0.318 | 0.164 | 0.528 |\n| HackerSec: board verdict | 0.583 | 0.218 | 0.318 | 0.156 | 0.531 |\n| HackerSec: board + fusion (provisional) | 0.573 | 0.220 | 0.318 | 0.164 | 0.528 |\n\n**On functions static analysis flagged** (192: 110 vulnerable, 82 fixed)\n\n| System | Precision | Recall | F1 | FPR |\n|---|---|---|---|---|\n| Semgrep + Bandit (baseline) | 0.573 | 1.000 | 0.729 | 1.000 |\n| HackerSec: board verdict | 0.583 | 0.991 | 0.734 | 0.951 |\n| HackerSec: board + fusion (provisional) | 0.573 | 1.000 | 0.729 | 1.000 |\n\nBoard removed **4.9%** of static false positives while keeping **99.1%** of true positives.\n\n**Pairwise** (vulnerable vs fixed version of the same function)\n\n| System | Pairs | P-C correct | P-V both flagged | P-B both cleared | P-R reversed |\n|---|---|---|---|---|---|\n| Semgrep + Bandit (baseline) | 499 | 0.064 | 0.156 | 0.771 | 0.008 |\n| HackerSec: board verdict | 499 | 0.070 | 0.148 | 0.773 | 0.008 |\n| HackerSec: board + fusion (provisional) | 499 | 0.064 | 0.156 | 0.771 | 0.008 |\n\n## vudenc — 499 functions, 250 pairs\n\n**End-to-end** (recall capped by static analysis)\n\n| System | Precision | Recall | F1 | FPR | Accuracy |\n|---|---|---|---|---|---|\n| Semgrep + Bandit (baseline) | 0.568 | 0.253 | 0.350 | 0.192 | 0.531 |\n| HackerSec: board verdict | 0.574 | 0.249 | 0.347 | 0.184 | 0.533 |\n| HackerSec: board + fusion (provisional) | 0.568 | 0.253 | 0.350 | 0.192 | 0.531 |\n\n**On functions static analysis flagged** (111: 63 vulnerable, 48 fixed)\n\n| System | Precision | Recall | F1 | FPR |\n|---|---|---|---|---|\n| Semgrep + Bandit (baseline) | 0.568 | 1.000 | 0.724 | 1.000 |\n| HackerSec: board verdict | 0.574 | 0.984 | 0.725 | 0.958 |\n| HackerSec: board + fusion (provisional) | 0.568 | 1.000 | 0.724 | 1.000 |\n\nBoard removed **4.2%** of static false positives while keeping **98.4%** of true positives.\n\n**Pairwise** (vulnerable vs fixed version of the same function)\n\n| System | Pairs | P-C correct | P-V both flagged | P-B both cleared | P-R reversed |\n|---|---|---|---|---|---|\n| Semgrep + Bandit (baseline) | 249 | 0.072 | 0.181 | 0.735 | 0.012 |\n| HackerSec: board verdict | 249 | 0.080 | 0.169 | 0.735 | 0.016 |\n| HackerSec: board + fusion (provisional) | 249 | 0.072 | 0.181 | 0.735 | 0.012 |\n\n## combined — 1498 functions, 750 pairs\n\n**End-to-end** (recall capped by static analysis)\n\n| System | Precision | Recall | F1 | FPR | Accuracy |\n|---|---|---|---|---|---|\n| Semgrep + Bandit (baseline) | 0.571 | 0.231 | 0.329 | 0.173 | 0.529 |\n| HackerSec: board verdict | 0.580 | 0.229 | 0.328 | 0.165 | 0.532 |\n| HackerSec: board + fusion (provisional) | 0.571 | 0.231 | 0.329 | 0.173 | 0.529 |\n\n**On functions static analysis flagged** (303: 173 vulnerable, 130 fixed)\n\n| System | Precision | Recall | F1 | FPR |\n|---|---|---|---|---|\n| Semgrep + Bandit (baseline) | 0.571 | 1.000 | 0.727 | 1.000 |\n| HackerSec: board verdict | 0.580 | 0.988 | 0.731 | 0.954 |\n| HackerSec: board + fusion (provisional) | 0.571 | 1.000 | 0.727 | 1.000 |\n\nBoard removed **4.6%** of static false positives while keeping **98.8%** of true positives.\n\n**Pairwise** (vulnerable vs fixed version of the same function)\n\n| System | Pairs | P-C correct | P-V both flagged | P-B both cleared | P-R reversed |\n|---|---|---|---|---|---|\n| Semgrep + Bandit (baseline) | 748 | 0.067 | 0.164 | 0.759 | 0.009 |\n| HackerSec: board verdict | 748 | 0.073 | 0.155 | 0.761 | 0.011 |\n| HackerSec: board + fusion (provisional) | 748 | 0.067 | 0.164 | 0.759 | 0.009 |\n"
+}

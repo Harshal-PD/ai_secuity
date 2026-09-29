@@ -15,7 +15,7 @@ services:
 
   # ── Ollama (Local LLM Runtime with GPU) ────────────────────────────────
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.9.6
     restart: unless-stopped
     # Do not bind 11434 on the DGX host — that port is often already taken by
     # a system Ollama. Backend/worker reach this service as http://ollama:11434
@@ -30,15 +30,10 @@ services:
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       # Keep weights resident across the three board seats to avoid a reload per finding
       - OLLAMA_KEEP_ALIVE=30m
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              # Do not pin a device_id here. NVIDIA_VISIBLE_DEVICES decides
-              # which cards Ollama sees; Ollama shards a large model across them.
-              count: all
-              capabilities: [ gpu ]
+      - OLLAMA_LLM_LIBRARY=cuda_v12
+      - OLLAMA_VULKAN=0
+      - OLLAMA_CONTEXT_LENGTH=4096
+    
     healthcheck:
       test: [ "CMD-SHELL", "ollama list || exit 1" ]
       interval: 15s
