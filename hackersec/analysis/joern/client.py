@@ -22,6 +22,11 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_JOERN_URL = os.getenv("JOERN_BASE_URL", "http://localhost:9000")
 _QUERY_TIMEOUT = float(os.getenv("JOERN_QUERY_TIMEOUT", "600"))
+# Importing one directory of a few files takes seconds. The server runs
+# queries one at a time and keeps running one the client gave up on, so a
+# short readiness probe is what tells a busy server from a stuck one.
+_IMPORT_TIMEOUT = float(os.getenv("JOERN_IMPORT_TIMEOUT", "300"))
+_READY_TIMEOUT = float(os.getenv("JOERN_READY_TIMEOUT", "30"))
 _ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 _TRIPLE = re.compile(r'"""(.*?)"""', re.S)
 _ESCAPED = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
@@ -72,44 +77,46 @@ class JoernClient:
     def ready(self) -> bool:
         """True once the server can actually evaluate a query."""
         try:
-            out = self._execute_raw('"<<HS_" + "OK>>"')
+            out = self._execute_raw('"<<HS_" + "OK>>"', timeout=_READY_TIMEOUT)
         except (httpx.HTTPError, JoernQueryError):
             return False
         return "<<HS_OK>>" in (out.get("stdout") or "")
 
     # ── Transport ───────────────────────────────────────────────────────────
 
-    def _execute_raw(self, query: str) -> dict:
+    def _execute_raw(self, query: str, timeout: float | None = None) -> dict:
         """
-        Run a Scala query and wait for its output.
+        Run a Scala query and wait for its output (up to `timeout` seconds,
+        JOERN_QUERY_TIMEOUT by default).
 
         `/query` only enqueues work and returns a UUID, so reading it directly
         yields nothing. `/query-sync` blocks until the result is ready; older
         servers without it are polled through `/result/<uuid>`.
         """
+        timeout = timeout or _QUERY_TIMEOUT
         payload = {"query": query}
         if self._sync_endpoint:
-            res = self.client.post(f"{self.base_url}/query-sync", json=payload)
+            res = self.client.post(f"{self.base_url}/query-sync", json=payload, timeout=timeout)
             if res.status_code == 404:
                 self._sync_endpoint = False
             else:
                 res.raise_for_status()
                 return self._normalize(res.json())
 
-        res = self.client.post(f"{self.base_url}/query", json=payload)
+        res = self.client.post(f"{self.base_url}/query", json=payload, timeout=timeout)
         res.raise_for_status()
         uuid = res.json().get("uuid")
         if not uuid:
             raise JoernQueryError(f"Joern did not accept the query: {res.text[:200]}")
-        deadline = time.time() + _QUERY_TIMEOUT
+        deadline = time.time() + timeout
         while time.time() < deadline:
-            out = self.client.get(f"{self.base_url}/result/{uuid}")
+            out = self.client.get(f"{self.base_url}/result/{uuid}", timeout=timeout)
             if out.status_code == 200:
                 data = out.json()
                 if data.get("success") or "stdout" in data:
                     return self._normalize(data)
             time.sleep(1.0)
-        raise JoernQueryError(f"Joern query {uuid} did not finish within {_QUERY_TIMEOUT:.0f}s")
+        raise JoernQueryError(f"Joern query {uuid} did not finish within {timeout:.0f}s")
 
     @staticmethod
     def _normalize(data: dict) -> dict:
@@ -124,7 +131,7 @@ class JoernClient:
     def import_project(self, input_path: Path, project: str) -> int:
         """Build a Python CPG for a directory. Returns the method count."""
         try:
-            out = self._execute_raw(build_import_query(Path(input_path).as_posix(), project))
+            out = self._execute_raw(build_import_query(Path(input_path).as_posix(), project), timeout=_IMPORT_TIMEOUT)
         except httpx.RequestError as e:
             raise JoernConnectionError(f"Failed to reach Joern during import: {e}")
         except httpx.HTTPStatusError as e:

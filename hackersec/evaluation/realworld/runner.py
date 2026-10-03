@@ -53,6 +53,10 @@ MIN_TOKENS_PER_SEC = float(os.getenv("REALWORLD_MIN_TOKENS_PER_SEC", "3"))
 HEALTH_EVERY_SEC = float(os.getenv("REALWORLD_HEALTH_EVERY_SEC", "900"))
 WORKERS = max(1, int(os.getenv("REALWORLD_WORKERS", "1")))
 LLM_ATTEMPTS = 3
+CPG_ATTEMPTS = 3
+# Samples recorded while Joern was failing have no taint evidence; redo them
+# on the next start instead of reporting them as normal results.
+REDO_CPG_FAILED = os.getenv("REALWORLD_REDO_CPG_FAILED", "1") not in ("0", "false", "False")
 # Candidates shown in the full debate, per source.
 MAX_SAST, MAX_TAINT, MAX_AUDITOR = 6, 3, 3
 
@@ -276,13 +280,19 @@ class Evaluator:
         # two Joern servers that share the workspace volume.
         job = f"rw{self.index}_" + hashlib.sha1(sample["file"].encode()).hexdigest()[:12]
         with self.joern_lock:
-            status = enrich_with_cpg(findings, Path(sample["file"]), job_id=job, client=self.joern, extra=extra)
-            if status == "failed" and not self.joern.ready():
-                # Joern went down mid-run: wait, then redo this sample's CPG step.
-                _wait_for_joern(self.joern)
-                for f in findings:
-                    f.cpg_context = None
+            for attempt in range(CPG_ATTEMPTS):
+                if attempt:
+                    # A failed import is nearly always the server (down, or
+                    # still busy with a query the client gave up on), so wait
+                    # until it answers again and redo this sample's CPG step.
+                    _wait_for_joern(self.joern)
+                    for f in findings:
+                        f.cpg_context = None
                 status = enrich_with_cpg(findings, Path(sample["file"]), job_id=job, client=self.joern, extra=extra)
+                if status != "failed":
+                    break
+                logger.warning(f"CPG import failed for {sample['sample_id']} on {self.joern.base_url} "
+                               f"(attempt {attempt + 1}/{CPG_ATTEMPTS})")
         return status
 
     def _candidates(self, sample: dict, code: str, context: str) -> tuple[list, dict, list, dict] | None:
@@ -478,8 +488,12 @@ def run_evaluation(retry_failed: bool = False, limit: int | None = None) -> None
         samples = samples[: limit * 2]
 
     results = state.load_results()
-    done = {sid for sid, r in results.items() if r.get("status") == "ok" or not retry_failed}
+    cpg_failed = {sid for sid, r in results.items()
+                  if REDO_CPG_FAILED and r.get("status") == "ok" and r.get("cpg_status") == "failed"}
+    done = {sid for sid, r in results.items() if r.get("status") == "ok" or not retry_failed} - cpg_failed
     todo = [s for s in samples if s["sample_id"] not in done]
+    if cpg_failed:
+        logger.warning(f"Re-running {len(cpg_failed)} samples whose CPG step failed")
     logger.info(f"{len(samples)} samples, {len(samples) - len(todo)} already done, {len(todo)} to go; "
                 f"{WORKERS} workers over {len(ollama_urls())} Ollama and {len(joern_urls()) if USE_CPG else 0} "
                 f"Joern server(s); phase 3 {'on' if PHASE3 else 'off'}")
