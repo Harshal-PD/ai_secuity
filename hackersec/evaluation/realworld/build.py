@@ -21,7 +21,7 @@ from hackersec.evaluation.realworld import state
 from hackersec.evaluation.realworld.functions import extract_pairs, skip_reason
 from hackersec.evaluation.realworld.gitfetch import GitFetcher, Unavailable, _slug
 from hackersec.evaluation.realworld.net import with_network_retry
-from hackersec.evaluation.realworld.sources import LOADERS, _download, _net_guard
+from hackersec.evaluation.realworld.sources import LOADERS, _download, _net_guard, local_file_pair
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,9 @@ MAX_PATHS_PER_COMMIT = 15
 DEFAULT_TARGETS = {
     "cvefixes": int(os.getenv("REALWORLD_TARGET_CVEFIXES", "500")),
     "vudenc": int(os.getenv("REALWORLD_TARGET_VUDENC", "250")),
+    # ~800 test pairs after the 20% dev split: enough to detect a difference
+    # of about 0.065 in TPR - FPR between two systems (80% power, alpha 0.05).
+    "reposvul": int(os.getenv("REALWORLD_TARGET_REPOSVUL", "1000")),
 }
 SEED = int(os.getenv("REALWORLD_SEED", "42"))
 
@@ -90,17 +93,22 @@ def _process_commit(c: dict, fetcher: GitFetcher) -> tuple[list, Counter]:
         drops["no_eligible_files"] += 1
         return [], drops
 
-    try:
-        fetcher._ensure_commit(fetcher._repo(c["repo_url"]), c["sha"])
-    except Unavailable as e:
-        logger.info(f"  unavailable: {e}")
-        drops["commit_unavailable"] += 1
-        return [], drops
+    local = bool(c.get("local"))
+    if not local:
+        try:
+            fetcher._ensure_commit(fetcher._repo(c["repo_url"]), c["sha"])
+        except Unavailable as e:
+            logger.info(f"  unavailable: {e}")
+            drops["commit_unavailable"] += 1
+            return [], drops
 
     collected = []
     for path in paths[:MAX_PATHS_PER_COMMIT]:
         try:
-            before, after = fetcher.file_pair(c["repo_url"], c["sha"], path)
+            if local:
+                before, after = local_file_pair(c, path)
+            else:
+                before, after = fetcher.file_pair(c["repo_url"], c["sha"], path)
         except Unavailable as e:
             logger.info(f"  {path}: {e}")
             drops["file_unavailable"] += 1
@@ -148,6 +156,10 @@ def _emit(c: dict, collected: list) -> list[dict]:
             "cwe_name": c["cwe_name"],
             "cve": c["cve"],
         }
+        if "static_check" in c:
+            # ReposVul's own Semgrep/RATS agreement for this file (1/0), so the
+            # report can show how much SAST gains from that selection.
+            common["dataset_static_check"] = c["static_check"].get(path)
         samples.append({
             **common,
             "sample_id": f"{pair_id}#before",

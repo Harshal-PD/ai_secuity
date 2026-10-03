@@ -194,11 +194,18 @@ services:
     env_file:
       - .env.docker
     environment:
-      - REALWORLD_DIR=/app/workspace/realworld
+      # One dataset directory per dataset choice: samples.jsonl is appended
+      # to, so ReposVul must not share CVEfixes/VUDENC's directory. Old runs
+      # are re-scored with REALWORLD_DATA=realworld.
+      - REALWORLD_DIR=/app/workspace/${REALWORLD_DATA:-realworld_reposvul}
       # One directory per run, so a new pipeline version never mixes with
       # (or resumes from) an older run's checkpoints.
-      - REALWORLD_RESULTS_DIR=/app/eval_results/${REALWORLD_RUN:-realworld_v3}
-      - SEMGREP_RULES_DIR=/app/workspace/realworld/semgrep_rules
+      - REALWORLD_RESULTS_DIR=/app/eval_results/${REALWORLD_RUN:-reposvul_v5}
+      - SEMGREP_RULES_DIR=/app/workspace/${REALWORLD_DATA:-realworld_reposvul}/semgrep_rules
+      - REALWORLD_DATASETS=${REALWORLD_DATASETS:-reposvul}
+      - REALWORLD_TARGET_REPOSVUL=${REALWORLD_TARGET_REPOSVUL:-1000}
+      # llm (default) | strict | all — see hackersec/evaluation/realworld/sources.py
+      - REALWORLD_REPOSVUL_LABELS=${REALWORLD_REPOSVUL_LABELS:-llm}
       - REALWORLD_TARGET_CVEFIXES=${REALWORLD_TARGET_CVEFIXES:-500}
       - REALWORLD_TARGET_VUDENC=${REALWORLD_TARGET_VUDENC:-250}
       - REALWORLD_GIT_COMMIT=${REALWORLD_GIT_COMMIT:-unknown}

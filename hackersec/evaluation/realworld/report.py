@@ -17,16 +17,20 @@ never see a test label. For each split and dataset:
                 P-B both cleared, P-R reversed
   vd_s          PrimeVul's VD-S: the miss rate (FNR) at the best threshold
                 whose false-positive rate stays within a fixed budget
-  significance  pair-level bootstrap 95% CIs (the pair is the unit, since its
-                two functions are not independent) and an exact McNemar test
-                of each system against the SAST baseline
+  significance  repo-cluster bootstrap 95% CIs (pairs from one project are not
+                independent) and an exact McNemar test of each system against
+                the SAST baseline, Holm-corrected across systems
   per_family    CWE families, grouped into SAST-reachable and logic/semantic
+
+On balanced pairs, Youden's J = TPR - FPR equals P-C - P-R and 2*accuracy - 1,
+so "does the system work" is the test of P-C > P-R: an exact sign test on the
+pairs whose two verdicts differ (a system with no signal has P-C = P-R).
 """
 
 import datetime
 import math
 import os
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 import numpy as np
 
@@ -34,8 +38,12 @@ from hackersec.evaluation.realworld import families, fusion, split, state
 
 BOOTSTRAP = int(os.getenv("REALWORLD_BOOTSTRAP", "1000"))
 VDS_BUDGETS = (0.005, 0.05)
+# Share of functions that are vulnerable in a real codebase; the test set is
+# 50% by construction, which hides how many alerts a user would have to triage.
+PREVALENCES = tuple(float(x) for x in os.getenv("REALWORLD_PREVALENCE", "0.05,0.01").split(",") if x.strip())
 
 SYSTEM_LABELS = {
+    "flag_all": "Flag every function (trivial reference)",
     "sast": "Semgrep + Bandit (baseline)",
     "board": "SAST board: Judge majority vote",
     "board_override": "SAST board + evidence override (ablation)",
@@ -48,10 +56,12 @@ SYSTEM_LABELS = {
     "full_override": "Candidates board + evidence override (ablation)",
     "full_calibrated": "Candidates board: vote score, dev-tuned threshold",
     "full_fusion": "Candidates board + fusion (trained on dev)",
+    "full_guard": "Candidates board: flagged unless the Judge's quoted check is in the code",
     "fusion_v1": "Board + synthetic fusion (v1)",
 }
 # (prediction key, score key); a None score marks a binary-only system.
 SYSTEM_KEYS = {
+    "flag_all": ("flag_all_pred", None),
     "sast": ("sast_pred", "sast_score"),
     "board": ("board_pred", "vote_score"),
     "board_override": ("board_override_pred", None),
@@ -64,6 +74,7 @@ SYSTEM_KEYS = {
     "full_override": ("full_override_pred", None),
     "full_calibrated": ("full_calibrated_pred", "full_p_score"),
     "full_fusion": ("full_fusion_pred", "full_fusion_score"),
+    "full_guard": ("full_guard_pred", None),
     "fusion_v1": ("fusion_v1_pred", None),
 }
 HEADLINE_ORDER = ("full_fusion", "full_calibrated", "full_board", "fusion", "board_calibrated", "board")
@@ -73,7 +84,7 @@ FAMILY_SYSTEMS = ("sast", "board_calibrated", "hunter_raw", "union_raw", "full_b
 
 # ── Preparing records ───────────────────────────────────────────────────────
 
-def _prepare(results: dict, pairs: dict) -> list[dict]:
+def _prepare(results: dict, pairs: dict, static_check: dict | None = None) -> list[dict]:
     rows = []
     for r in results.values():
         if r.get("status") != "ok":
@@ -82,7 +93,9 @@ def _prepare(results: dict, pairs: dict) -> list[dict]:
         meta = pairs.get(r["pair_id"], {})
         r["split"] = r.get("split") or meta.get("split")
         r["clean"] = meta.get("clean", r.get("clean"))
+        r["dataset_static_check"] = (static_check or {}).get(r["sample_id"])
         r["flagged"] = (r.get("n_findings") or 0) > 0
+        r["flag_all_pred"] = 1
         r["family"] = families.family(r.get("cwe"))
         r["family_group"] = families.group(r.get("cwe"))
         r["sast_score"] = 1.0 if r["flagged"] else None
@@ -96,8 +109,15 @@ def _prepare(results: dict, pairs: dict) -> list[dict]:
                 r["union_flagged"] = bool(r.get("union_pred"))
                 r["full_vote_score"] = score(r.get("full_vote_share"), r["union_flagged"], r["full_pred"])
                 r["full_p_score"] = score(r.get("full_p_vulnerable"), r["union_flagged"], r["full_pred"])
-                confs = [c.get("confidence") or 0.0 for c in (r.get("auditor") or {}).get("candidates") or []]
-                r["hunter_score"] = max(confs) if confs else None
+                full_board = r.get("full_board") or {}
+                if "guard_grounded" in full_board or not r["union_flagged"]:
+                    r["full_guard_pred"] = int(r["union_flagged"] and full_board.get("guard_grounded") is not True)
+                audit = r.get("auditor") or {}
+                if audit.get("p_vulnerable") is not None:
+                    r["hunter_score"] = float(audit["p_vulnerable"])
+                else:
+                    confs = [c.get("confidence") or 0.0 for c in audit.get("candidates") or []]
+                    r["hunter_score"] = max(confs) if confs else None
         else:
             # v1: one debate per finding, the evidence rule applied as an
             # override, and the synthetic-trained fusion classifier.
@@ -110,7 +130,8 @@ def _prepare(results: dict, pairs: dict) -> list[dict]:
 def _calibrate(rows: list[dict]) -> dict:
     """Fit the board threshold and fusion on dev; apply both to every row."""
     dev = [r for r in rows if r["split"] == "dev"]
-    out = {"dev_functions": len(dev), "board_threshold": None, "fusion": None, "fusion_model": None}
+    out = {"dev_functions": len(dev), "metric": fusion.CALIBRATION_METRIC, "board_threshold": None,
+           "fusion": None, "fusion_model": None}
     if not rows or any("p_score" not in r for r in rows):
         out["fusion"] = "not available for v1 results"
         return out
@@ -166,7 +187,40 @@ def _scores(rows: list[dict], key: str) -> dict:
         "n": len(rows), "tp": tp, "fp": fp, "tn": tn, "fn": fn,
         "precision": round(p, 4), "recall": round(rec, 4), "f1": round(f1, 4),
         "fpr": round(fpr, 4), "accuracy": round(acc, 4),
+        "balanced_accuracy": round(fusion.metric(tp, fp, fn, tn, "balanced_accuracy"), 4),
+        "mcc": round(fusion.metric(tp, fp, fn, tn, "mcc"), 4),
+        "youden": round(rec - fpr, 4),
+        # Likelihood ratio of a positive verdict; precision at prevalence pi is
+        # 1 / (1 + (1 - pi) / (pi * LR+)), so it sets how usable alerts are.
+        "lr_plus": round(rec / fpr, 4) if fpr else None,
+        "precision_at_prevalence": {
+            f"{pi:g}": round(pi * rec / (pi * rec + (1 - pi) * fpr), 4) if pi * rec + (1 - pi) * fpr else None
+            for pi in PREVALENCES
+        },
     }
+
+
+def _binom_p(b: int, c: int) -> float:
+    """Exact two-sided binomial test of b vs c successes at p = 1/2."""
+    n = b + c
+    if n == 0:
+        return 1.0
+    log_half = n * math.log(0.5)
+    tail = sum(
+        math.exp(math.lgamma(n + 1) - math.lgamma(i + 1) - math.lgamma(n - i + 1) + log_half)
+        for i in range(min(b, c) + 1)
+    )
+    return min(1.0, 2 * tail)
+
+
+def _holm(pvals: dict) -> dict:
+    """Holm step-down adjustment; keys with a None p are left out."""
+    items = sorted((p, k) for k, p in pvals.items() if p is not None)
+    out, running = {}, 0.0
+    for i, (p, k) in enumerate(items):
+        running = max(running, min(1.0, (len(items) - i) * p))
+        out[k] = round(running, 4)
+    return out
 
 
 def _pairwise(rows: list[dict], key: str) -> dict:
@@ -180,7 +234,40 @@ def _pairwise(rows: list[dict], key: str) -> dict:
         v, f = p["vulnerable"], p["fixed"]
         counts["P-C" if v and not f else "P-V" if v and f else "P-B" if not v and not f else "P-R"] += 1
     n = sum(counts.values())
-    return {"pairs": n, **counts, **{f"{k}_rate": round(c / n, 4) if n else 0.0 for k, c in counts.items()}}
+    differ = counts["P-C"] + counts["P-R"]
+    return {
+        "pairs": n, **counts, **{f"{k}_rate": round(c / n, 4) if n else 0.0 for k, c in counts.items()},
+        # Pairs whose two versions get different verdicts, and how often the
+        # vulnerable one is the flagged one (0.5 = no signal).
+        "differ_rate": round(differ / n, 4) if n else 0.0,
+        "right_way_round": round(counts["P-C"] / differ, 4) if differ else None,
+        # H0 "no signal": P-C and P-R are equally likely among differing pairs.
+        "sign_test_p": round(_binom_p(counts["P-C"], counts["P-R"]), 6),
+    }
+
+
+def _pairwise_scores(rows: list[dict], score_key: str) -> dict | None:
+    """Within each pair, is the vulnerable version scored higher? Uses the
+    pairs where both versions are flagged, which the binary verdict ignores.
+    An unflagged function ranks below every flagged one."""
+    pairs = defaultdict(dict)
+    for r in rows:
+        s = r.get(score_key)
+        pairs[r["pair_id"]][r["kind"]] = -1.0 if s is None else float(s)
+    wins = losses = ties = 0
+    for p in pairs.values():
+        if "vulnerable" not in p or "fixed" not in p:
+            continue
+        d = p["vulnerable"] - p["fixed"]
+        wins, losses, ties = wins + (d > 1e-9), losses + (d < -1e-9), ties + (abs(d) <= 1e-9)
+    n = wins + losses + ties
+    if not n:
+        return None
+    return {
+        "pairs": n, "higher": wins, "lower": losses, "tied": ties,
+        "auc": round((wins + 0.5 * ties) / n, 4),
+        "sign_test_p": round(_binom_p(wins, losses), 6),
+    }
 
 
 def _vds(rows: list[dict], score_key: str, max_fpr: float) -> dict | None:
@@ -205,62 +292,67 @@ def _mcnemar(rows: list[dict], key: str, baseline_key: str) -> dict:
     """Exact two-sided McNemar test on per-function correctness."""
     b = sum(1 for r in rows if r[key] == r["label"] and r[baseline_key] != r["label"])
     c = sum(1 for r in rows if r[key] != r["label"] and r[baseline_key] == r["label"])
-    n = b + c
-    if n == 0:
-        p = 1.0
-    else:
-        log_half = n * math.log(0.5)
-        tail = sum(
-            math.exp(math.lgamma(n + 1) - math.lgamma(i + 1) - math.lgamma(n - i + 1) + log_half)
-            for i in range(min(b, c) + 1)
-        )
-        p = min(1.0, 2 * tail)
-    return {"system_only_correct": b, "baseline_only_correct": c, "p_value": round(p, 4)}
+    return {"system_only_correct": b, "baseline_only_correct": c, "p_value": round(_binom_p(b, c), 4)}
 
 
 def _ci(values: np.ndarray) -> list[float]:
     return [round(float(np.percentile(values, 2.5)), 4), round(float(np.percentile(values, 97.5)), 4)]
 
 
+def _repo(pair_id: str) -> tuple[str, str]:
+    return split._origin(pair_id)[:2]
+
+
 def _bootstrap(rows: list[dict], systems: list[str]) -> dict:
+    """Resamples whole repositories: pairs from one project share code, style
+    and maintainers, so resampling pairs would give intervals that are too
+    narrow."""
     if BOOTSTRAP <= 0 or not rows:
         return {}
-    pair_ids = sorted({r["pair_id"] for r in rows})
-    index = {p: i for i, p in enumerate(pair_ids)}
-    n = len(pair_ids)
+    repos = sorted({_repo(r["pair_id"]) for r in rows})
+    index = {g: i for i, g in enumerate(repos)}
+    n = len(repos)
 
-    conf = {s: np.zeros((n, 3)) for s in systems}  # tp, fp, fn per pair
+    conf = {s: np.zeros((n, 4)) for s in systems}  # tp, fp, fn, tn per repo
     correct_pair = {s: np.zeros(n) for s in systems}
     complete = np.zeros(n)
-    by_pair: dict[int, dict] = defaultdict(dict)
+    by_pair: dict[str, dict] = defaultdict(dict)
     for r in rows:
-        i = index[r["pair_id"]]
-        by_pair[i][r["kind"]] = r
+        i = index[_repo(r["pair_id"])]
+        by_pair[r["pair_id"]][r["kind"]] = r
         for s in systems:
             pred, y = r[SYSTEM_KEYS[s][0]], r["label"]
-            conf[s][i] += (pred == 1 and y == 1, pred == 1 and y == 0, pred == 0 and y == 1)
-    for i, kinds in by_pair.items():
+            conf[s][i] += (pred == 1 and y == 1, pred == 1 and y == 0, pred == 0 and y == 1, pred == 0 and y == 0)
+    for pid, kinds in by_pair.items():
         if "vulnerable" in kinds and "fixed" in kinds:
-            complete[i] = 1
+            i = index[_repo(pid)]
+            complete[i] += 1
             for s in systems:
                 key = SYSTEM_KEYS[s][0]
-                correct_pair[s][i] = kinds["vulnerable"][key] == 1 and kinds["fixed"][key] == 0
+                correct_pair[s][i] += kinds["vulnerable"][key] == 1 and kinds["fixed"][key] == 0
 
     draws = np.random.default_rng(0).integers(0, n, size=(BOOTSTRAP, n))
     n_complete = complete[draws].sum(axis=1)
-    out, f1s = {}, {}
+    out, f1s, mccs, js = {}, {}, {}, {}
     for s in systems:
         c = conf[s][draws].sum(axis=1)
-        tp, fp, fn = c[:, 0], c[:, 1], c[:, 2]
+        tp, fp, fn, tn = c[:, 0], c[:, 1], c[:, 2], c[:, 3]
         denom = 2 * tp + fp + fn
         f1 = np.divide(2 * tp, denom, out=np.zeros_like(tp), where=denom > 0)
+        mcc_denom = np.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
+        mcc = np.divide(tp * tn - fp * fn, mcc_denom, out=np.zeros_like(tp), where=mcc_denom > 0)
+        tpr = np.divide(tp, tp + fn, out=np.zeros_like(tp), where=tp + fn > 0)
+        fpr = np.divide(fp, fp + tn, out=np.zeros_like(fp), where=fp + tn > 0)
         pc = np.divide(correct_pair[s][draws].sum(axis=1), n_complete,
                        out=np.zeros(BOOTSTRAP), where=n_complete > 0)
-        f1s[s] = f1
-        out[s] = {"f1_ci": _ci(f1), "pc_rate_ci": _ci(pc)}
+        f1s[s], mccs[s], js[s] = f1, mcc, tpr - fpr
+        out[s] = {"f1_ci": _ci(f1), "mcc_ci": _ci(mcc), "youden_ci": _ci(tpr - fpr), "pc_rate_ci": _ci(pc)}
     for s in systems:
         if s != "sast" and "sast" in f1s:
             out[s]["delta_f1_vs_sast_ci"] = _ci(f1s[s] - f1s["sast"])
+            out[s]["delta_mcc_vs_sast_ci"] = _ci(mccs[s] - mccs["sast"])
+            out[s]["delta_youden_vs_sast_ci"] = _ci(js[s] - js["sast"])
+    out["_resampling_unit"] = {"unit": "repository", "clusters": n, "draws": BOOTSTRAP}
     return out
 
 
@@ -326,6 +418,9 @@ def _telemetry(rows: list[dict]) -> dict:
             "auditor_rate": _rate(n, lambda c: c.get("auditor", 0) > 0),
             "only_llm_rate": _rate(n, lambda c: not c.get("sast") and (c.get("taint") or c.get("auditor"))),
             "auditor_parse_failed_rate": _rate(audited, lambda r: r["auditor"].get("status") != "success"),
+            "auditor_vulnerable_verdict_rate": _rate(
+                [r for r in audited if r["auditor"].get("verdict")],
+                lambda r: r["auditor"]["verdict"] == "VULNERABLE"),
             "spec_parse_failed_rate": _rate(
                 specs, lambda r: r["taint_spec"].get("status") not in ("success", "no_calls")),
             "mean_spec_sinks": round(sum(len(r["taint_spec"].get("sinks") or []) for r in specs) / len(specs), 2)
@@ -359,6 +454,9 @@ def _board_telemetry(rows: list[dict], board_key: str, pred_key: str, override_k
         "no_valid_vote_rate": _rate(boards, lambda r: not valid(r)),
         "majority_not_vulnerable_rate": _rate(boards, lambda r: r[pred_key] == 0),
         "evidence_grounded_rate": _rate(boards, lambda r: r[board_key].get("evidence_grounded") is True),
+        "evidence_reasons": dict(sorted(Counter(r[board_key].get("evidence_reason") or "unknown"
+                                                for r in boards).items())),
+        "guard_grounded_rate": _rate(boards, lambda r: r[board_key].get("guard_grounded") is True),
         "override_flip_rate": _rate(boards, lambda r: r.get(override_key) != r[pred_key]),
         "code_truncated_rate": _rate(boards, lambda r: bool(r[board_key].get("code_truncated"))),
         "context_overflow_rate": _rate(boards, lambda r: bool(r[board_key].get("context_overflow"))),
@@ -405,6 +503,7 @@ def _view(rows: list[dict], systems: list[str], stats: bool) -> dict:
         "candidates_flagged": (_flagged_view(rows, systems, "union_flagged")
                                if rows and all("union_flagged" in r for r in rows) else None),
         "pairwise": {s: _pairwise(rows, SYSTEM_KEYS[s][0]) for s in systems},
+        "pairwise_scores": {s: _pairwise_scores(rows, SYSTEM_KEYS[s][1]) for s in systems if SYSTEM_KEYS[s][1]},
         "vd_s": {
             s: {f"fpr_{b:g}": _vds(rows, SYSTEM_KEYS[s][1], b) for b in VDS_BUDGETS}
             for s in systems if SYSTEM_KEYS[s][1]
@@ -417,11 +516,20 @@ def _view(rows: list[dict], systems: list[str], stats: bool) -> dict:
             for cwe, rs in sorted(by_cwe.items(), key=lambda kv: -len(kv[1]))
         },
     }
+    # Every system is tested, so p values are Holm-corrected across systems
+    # (the trivial reference is not one of the hypotheses).
+    tested = [s for s in systems if s != "flag_all"]
+    for key, holm in (
+        ("pairwise", _holm({s: view["pairwise"][s]["sign_test_p"] for s in tested})),
+        ("pairwise_scores", _holm({s: (view["pairwise_scores"].get(s) or {}).get("sign_test_p") for s in tested})),
+    ):
+        for s, p in holm.items():
+            view[key][s]["sign_test_p_holm"] = p
     if stats:
-        view["significance"] = {
-            "bootstrap": _bootstrap(rows, systems),
-            "mcnemar_vs_sast": {s: _mcnemar(rows, SYSTEM_KEYS[s][0], "sast_pred") for s in systems if s != "sast"},
-        }
+        mcnemar = {s: _mcnemar(rows, SYSTEM_KEYS[s][0], "sast_pred") for s in systems if s != "sast"}
+        for s, p in _holm({s: m["p_value"] for s, m in mcnemar.items() if s != "flag_all"}).items():
+            mcnemar[s]["p_holm"] = p
+        view["significance"] = {"bootstrap": _bootstrap(rows, systems), "mcnemar_vs_sast": mcnemar}
     return view
 
 
@@ -441,20 +549,56 @@ def _fmt_ci(ci) -> str:
     return f" [{ci[0]:.3f}, {ci[1]:.3f}]" if ci else ""
 
 
+def _fmt_p(p) -> str:
+    return "—" if p is None else f"{p:.2g}" if p < 0.001 else f"{p:.3f}"
+
+
+def _md_signal(v: dict, systems: list[str]) -> list[str]:
+    sig = v.get("significance") or {}
+    boot, mcn = sig.get("bootstrap") or {}, sig.get("mcnemar_vs_sast") or {}
+    prev = [f"{pi:g}" for pi in PREVALENCES]
+    L = ["**Does it separate vulnerable from fixed code?** J = TPR − FPR, which on these pairs equals "
+         "P-C − P-R (0 = no signal). Sign test: are correct pairs more common than reversed ones? "
+         "Score AUC: share of pairs where the vulnerable version gets the higher score. "
+         "p values are Holm-corrected across systems; CIs resample whole repositories.", "",
+         "| System | J [95% CI] | ΔJ vs SAST [95% CI] | Pair sign test p | Score AUC on pairs | Score sign test p "
+         "| McNemar p vs SAST | LR+ | " + " / ".join(f"{float(p):.0%}" for p in prev) + " prevalence: precision |",
+         "|---|---|---|---|---|---|---|---|---|"]
+    for s in systems:
+        m, b, pw = v["end_to_end"][s], boot.get(s, {}), v["pairwise"][s]
+        ps = (v.get("pairwise_scores") or {}).get(s)
+        auc = "—" if not ps else f"{ps['auc']:.3f}"
+        lr = m.get("lr_plus")
+        precision = " / ".join("—" if m["precision_at_prevalence"].get(p) is None
+                               else f"{m['precision_at_prevalence'][p]:.3f}" for p in prev)
+        L.append(
+            f"| {SYSTEM_LABELS[s]} | {m['youden']:+.3f}{_fmt_ci(b.get('youden_ci'))} "
+            f"| {_fmt_ci(b.get('delta_youden_vs_sast_ci')).strip() or '—'} "
+            f"| {_fmt_p(pw.get('sign_test_p_holm', pw['sign_test_p']))} | {auc} "
+            f"| {_fmt_p(ps.get('sign_test_p_holm', ps['sign_test_p'])) if ps else '—'} "
+            f"| {_fmt_p(mcn.get(s, {}).get('p_holm', mcn.get(s, {}).get('p_value')))} "
+            f"| {'—' if lr is None else f'{lr:.2f}'} | {precision} |"
+        )
+    return L
+
+
 def _md_view(name: str, v: dict, systems: list[str]) -> list[str]:
     sig = v.get("significance") or {}
     boot, mcn = sig.get("bootstrap") or {}, sig.get("mcnemar_vs_sast") or {}
-    L = [f"### {name} — {v['samples']} functions, {v['pairs']} pairs", "",
-         "**End-to-end** (every function; SAST-board recall is capped by SAST, candidates-board recall "
+    L = [f"### {name} — {v['samples']} functions, {v['pairs']} pairs", ""]
+    L += _md_signal(v, systems) + [""]
+    L += ["**End-to-end** (every function; SAST-board recall is capped by SAST, candidates-board recall "
          "by the any-candidate row)", "",
-         "| System | Precision | Recall | F1 [95% CI] | ΔF1 vs SAST [95% CI] | FPR | McNemar p (accuracy) |",
-         "|---|---|---|---|---|---|---|"]
+         "| System | Precision | Recall | FPR | Accuracy | MCC [95% CI] | ΔMCC vs SAST [95% CI] | F1 [95% CI] "
+         "| McNemar p (accuracy, uncorrected) |",
+         "|---|---|---|---|---|---|---|---|---|"]
     for s in systems:
         m, b = v["end_to_end"][s], boot.get(s, {})
         p = mcn.get(s, {}).get("p_value")
         L.append(
-            f"| {SYSTEM_LABELS[s]} | {m['precision']:.3f} | {m['recall']:.3f} | {m['f1']:.3f}{_fmt_ci(b.get('f1_ci'))} "
-            f"| {_fmt_ci(b.get('delta_f1_vs_sast_ci')).strip() or '—'} | {m['fpr']:.3f} | {'—' if p is None else f'{p:.4f}'} |"
+            f"| {SYSTEM_LABELS[s]} | {m['precision']:.3f} | {m['recall']:.3f} | {m['fpr']:.3f} | {m['accuracy']:.3f} "
+            f"| {m['mcc']:.3f}{_fmt_ci(b.get('mcc_ci'))} | {_fmt_ci(b.get('delta_mcc_vs_sast_ci')).strip() or '—'} "
+            f"| {m['f1']:.3f}{_fmt_ci(b.get('f1_ci'))} | {'—' if p is None else f'{p:.4f}'} |"
         )
 
     subsets = [("static analysis flagged", v["sast_flagged"])]
@@ -462,23 +606,28 @@ def _md_view(name: str, v: dict, systems: list[str]) -> list[str]:
         subsets.append(("any candidate source flagged (SAST, LLM-spec taint or auditor)", v["candidates_flagged"]))
     for title, fl in subsets:
         L += ["", f"**On functions {title}** ({fl['n']}: {fl['vulnerable']} vulnerable, {fl['fixed']} fixed)", "",
-              "| System | Precision | Recall | F1 | FPR | FPs removed | TPs kept |", "|---|---|---|---|---|---|---|"]
+              "| System | Precision | Recall | FPR | MCC | F1 | FPs removed | TPs kept |",
+              "|---|---|---|---|---|---|---|---|"]
         for s in systems:
             m = fl[s]
             removed, kept = fl.get(f"{s}_false_positives_removed"), fl.get(f"{s}_true_positives_kept")
             L.append(
-                f"| {SYSTEM_LABELS[s]} | {m['precision']:.3f} | {m['recall']:.3f} | {m['f1']:.3f} | {m['fpr']:.3f} "
-                f"| {'—' if removed is None else f'{removed:.1%}'} | {'—' if kept is None else f'{kept:.1%}'} |"
+                f"| {SYSTEM_LABELS[s]} | {m['precision']:.3f} | {m['recall']:.3f} | {m['fpr']:.3f} | {m['mcc']:.3f} "
+                f"| {m['f1']:.3f} | {'—' if removed is None else f'{removed:.1%}'} "
+                f"| {'—' if kept is None else f'{kept:.1%}'} |"
             )
 
     L += ["", "**Pairwise** (vulnerable vs fixed version of the same function)", "",
-          "| System | Pairs | P-C correct [95% CI] | P-V both flagged | P-B both cleared | P-R reversed |",
-          "|---|---|---|---|---|---|"]
+          "| System | Pairs | P-C correct [95% CI] | P-V both flagged | P-B both cleared | P-R reversed "
+          "| Verdicts differ | Right way round when they differ |",
+          "|---|---|---|---|---|---|---|---|"]
     for s in systems:
         p = v["pairwise"][s]
+        rwr = p.get("right_way_round")
         L.append(
             f"| {SYSTEM_LABELS[s]} | {p['pairs']} | {p['P-C_rate']:.3f}{_fmt_ci(boot.get(s, {}).get('pc_rate_ci'))} "
-            f"| {p['P-V_rate']:.3f} | {p['P-B_rate']:.3f} | {p['P-R_rate']:.3f} |"
+            f"| {p['P-V_rate']:.3f} | {p['P-B_rate']:.3f} | {p['P-R_rate']:.3f} "
+            f"| {p['differ_rate']:.3f} | {'—' if rwr is None else f'{rwr:.3f}'} |"
         )
 
     if v["vd_s"]:
@@ -497,14 +646,14 @@ def _md_families(v: dict, systems: list[str]) -> list[str]:
     has_cand = any("vulnerable_candidate_rate" in b for b in fam["groups"].values())
     head = ("| Family | Functions | Vulnerable flagged by SAST | "
             + ("Vulnerable with any candidate | " if has_cand else "")
-            + " | ".join(f"{s} F1 / R" for s in shown) + " |")
+            + " | ".join(f"{s} MCC / R" for s in shown) + " |")
     sep = "|---|---|---|" + ("---|" if has_cand else "") + "---|" * len(shown)
 
     def row(name, b):
         cells = [name, str(b["samples"]), f"{(b['vulnerable_flagged_rate'] or 0):.1%}"]
         if has_cand:
             cells.append(f"{(b.get('vulnerable_candidate_rate') or 0):.1%}")
-        cells += [f"{b[s]['f1']:.3f} / {b[s]['recall']:.3f}" for s in shown]
+        cells += [f"{b[s]['mcc']:.3f} / {b[s]['recall']:.3f}" for s in shown]
         return "| " + " | ".join(cells) + " |"
 
     L = [head, sep]
@@ -529,20 +678,29 @@ def _markdown(report: dict) -> str:
     for ds, s in report["split"].items():
         L.append(f"| {ds} | {s['dev_pairs']} ({s['dev_repos']}) | {s['test_pairs']} ({s['test_repos']}) | {s['clean_pairs']} |")
     cal = report["calibration"]
+    objective = cal.get("metric", "f1")
+
+    def fusion_extra(fm: dict) -> str:
+        if fm.get("threshold") is None:
+            return ""
+        mcc = fm.get("dev_cv_mcc")
+        return (f", threshold {fm['threshold']:.3f}, dev CV F1 {fm['dev_cv_f1']:.3f}"
+                + ("" if mcc is None else f", dev CV MCC {mcc:.3f}"))
+
     L += ["", f"- Dev functions evaluated: {cal['dev_functions']}"]
     if cal.get("board_threshold") is not None:
-        L.append(f"- Board threshold on mean P(vulnerable) across Judge votes: **{cal['board_threshold']:.3f}** (max F1 on dev)")
+        L.append(f"- Board threshold on mean P(vulnerable) across Judge votes: **{cal['board_threshold']:.3f}** "
+                 f"(max {objective} on dev)")
     if cal.get("fusion"):
-        fm = cal.get("fusion_model") or {}
-        extra = f", threshold {fm['threshold']:.3f}, dev CV F1 {fm['dev_cv_f1']:.3f}" if fm.get("threshold") is not None else ""
-        L.append(f"- Fusion: {cal['fusion']}{extra}")
+        L.append(f"- Fusion: {cal['fusion']}{fusion_extra(cal.get('fusion_model') or {})}")
     if cal.get("full_threshold") is not None:
-        L.append(f"- Candidates board threshold on mean P(vulnerable): **{cal['full_threshold']:.3f}** (max F1 on dev)")
+        L.append(f"- Candidates board threshold on mean P(vulnerable): **{cal['full_threshold']:.3f}** "
+                 f"(max {objective} on dev)")
     if cal.get("full_fusion"):
-        fm = cal.get("full_fusion_model") or {}
-        extra = f", threshold {fm['threshold']:.3f}, dev CV F1 {fm['dev_cv_f1']:.3f}" if fm.get("threshold") is not None else ""
-        L.append(f"- Candidates fusion: {cal['full_fusion']}{extra}")
-    L.append("")
+        L.append(f"- Candidates fusion: {cal['full_fusion']}{fusion_extra(cal.get('full_fusion_model') or {})}")
+    L += ["", "Each pair contributes one vulnerable and one fixed function, so flagging every function scores "
+          "F1 0.667, accuracy 0.5 and MCC 0 (the trivial reference row). MCC, accuracy and the pairwise "
+          "columns show whether a system actually separates vulnerable from fixed code.", ""]
 
     test = report["views"]["test"]
     L += ["## Test split (primary)", ""]
@@ -569,14 +727,24 @@ def _markdown(report: dict) -> str:
         L += ["## Test, clean subset (single-function fixes)", ""]
         L += _md_view("clean", clean_head, systems)
 
+    strata = report["views"].get("test_by_static_check") or {}
+    if strata:
+        L += ["## Test, split by ReposVul's own static check", "",
+              "ReposVul's strict label requires Semgrep or RATS to flag the pre-fix file at the changed lines. "
+              "SAST is favoured by construction where that check matched; the other stratum shows how each "
+              "system does on fixes that pattern rules did not see.", ""]
+        for name, v in strata.items():
+            L += [f"### {name} — {v['samples']} functions, {v['pairs']} pairs", ""] + _md_signal(v, systems) + [""]
+
     dev = report["views"]["dev"]
     dev_head = dev.get("combined") or next(iter(dev.values()), None)
     if dev_head:
         L += ["## Dev split (used for calibration; not a held-out result)", "",
-              "| System | Precision | Recall | F1 | FPR |", "|---|---|---|---|---|"]
+              "| System | Precision | Recall | FPR | Accuracy | MCC | F1 |", "|---|---|---|---|---|---|---|"]
         for s in systems:
             m = dev_head["end_to_end"][s]
-            L.append(f"| {SYSTEM_LABELS[s]} | {m['precision']:.3f} | {m['recall']:.3f} | {m['f1']:.3f} | {m['fpr']:.3f} |")
+            L.append(f"| {SYSTEM_LABELS[s]} | {m['precision']:.3f} | {m['recall']:.3f} | {m['fpr']:.3f} "
+                     f"| {m['accuracy']:.3f} | {m['mcc']:.3f} | {m['f1']:.3f} |")
         L.append("")
 
     L += ["## Caveats", ""] + [f"- {x}" for x in report["caveats"]]
@@ -593,7 +761,8 @@ def build_report(write: bool = True) -> dict:
     for r in results.values():
         statuses[r.get("status")] += 1
 
-    rows = _prepare(results, pairs)
+    static_check = {s["sample_id"]: s.get("dataset_static_check") for s in samples if "sample_id" in s}
+    rows = _prepare(results, pairs, static_check)
     calibration = _calibrate(rows)
     systems = _systems(rows)
     pipeline = next((r.get("pipeline") for r in rows if r.get("pipeline")), "v1-per-finding" if rows else "none")
@@ -606,7 +775,16 @@ def build_report(write: bool = True) -> dict:
         "dev": _split_views(dev, systems, stats=False),
         "all": _split_views(rows, systems, stats=False),
     }
+    if any(r["dataset_static_check"] is not None for r in test):
+        views["test_by_static_check"] = {
+            name: _view(rs, systems, stats=True)
+            for name, rs in (
+                ("ReposVul static check matched", [r for r in test if r["dataset_static_check"] == 1]),
+                ("ReposVul static check did not match", [r for r in test if r["dataset_static_check"] == 0]),
+            ) if rs
+        }
 
+    datasets = {r["dataset"] for r in rows} or {s.get("dataset") for s in samples}
     total = len(samples)
     report = {
         "generated_at": datetime.datetime.now().isoformat(timespec="seconds"),
@@ -628,9 +806,10 @@ def build_report(write: bool = True) -> dict:
         "build": state.read_json(state.BUILD_PROGRESS_PATH, {}) or {},
         "views": views,
         "caveats": [
-            "Labels follow CVEfixes: a function changed by a security-fix commit is vulnerable before the fix "
-            "and fixed after it. Tangled commits (> REALWORLD_MAX_FUNCS_PER_COMMIT functions) are excluded; the "
-            "clean subset further keeps only commits that changed a single function.",
+            "Labels follow the fix-commit convention (CVEfixes, PrimeVul): a function changed by a security-fix "
+            "commit is vulnerable before the fix and fixed after it. Tangled commits "
+            "(> REALWORLD_MAX_FUNCS_PER_COMMIT functions) are excluded; the clean subset further keeps only "
+            "commits that changed a single function.",
             "The SAST board only reasons about Semgrep/Bandit findings, so its recall cannot exceed theirs. The "
             "candidates board also sees LLM-spec taint flows (IRIS-style: the LLM labels the function's calls as "
             "sources/sinks and Joern checks the flows) and LLM auditor candidates (GPTLens-style), so its ceiling is "
@@ -639,14 +818,31 @@ def build_report(write: bool = True) -> dict:
             "dataset's label or CWE. Context is limited to the same file; cross-file callers are not shown.",
             "The auditor-alone and taint-alone rows have no critic; they measure how much each candidate source "
             "finds, and how noisy it is, before the board filters it.",
-            "Board thresholds and fusion models are fitted on the dev split only; test repositories never "
-            "appear in dev. Dev numbers are in-sample and are shown for reference.",
-            "Confidence intervals resample vulnerable/fixed pairs (1,000 draws); McNemar compares per-function "
-            "correctness against SAST and only differs from it on flagged functions.",
-            "VUDENC commits are keyword-mined and noisier than CVE-linked CVEfixes commits; compare within, "
-            "not across, datasets.",
+            "Board thresholds and fusion models are fitted on the dev split only (maximising "
+            f"{fusion.CALIBRATION_METRIC}); test repositories never appear in dev. Dev numbers are in-sample and "
+            "are shown for reference.",
+            "Test and dev are balanced by construction (one vulnerable and one fixed function per pair), so F1 "
+            "rewards flagging everything: compare every row with the trivial reference, and read MCC, accuracy "
+            "and the pairwise columns for discrimination. 'Right way round' is the share of pairs with differing "
+            "verdicts where the vulnerable version is the flagged one; 0.5 means no signal.",
+            f"Confidence intervals resample whole repositories ({BOOTSTRAP:,} draws), since pairs from one project "
+            "are not independent. McNemar compares per-function correctness against SAST. Sign-test and McNemar "
+            "p values in the signal tables are Holm-corrected across the systems compared.",
+            "Precision at a given prevalence is TPR·π / (TPR·π + FPR·(1 − π)): what a user would see if that "
+            "share of functions were vulnerable, instead of the 50% this test set has by construction.",
         ],
     }
+    if "vudenc" in datasets:
+        report["caveats"].append("VUDENC commits are keyword-mined and noisier than CVE-linked CVEfixes commits; "
+                                 "compare within, not across, datasets.")
+    if "reposvul" in datasets:
+        from hackersec.evaluation.realworld.sources import REPOSVUL_LABELS
+
+        report["caveats"].append(
+            f"ReposVul files are kept by its '{REPOSVUL_LABELS}' label policy (llm = its LLM untangling check "
+            "marks the file as vulnerability-fixing; strict = its LLM and static checks both do), and patches it "
+            "marks as outdated are skipped. Its static check is Semgrep/RATS, so the 'static check matched' "
+            "stratum favours SAST by construction, and its LLM check may favour fixes an LLM recognises.")
     for dp in report["build"].values():
         if isinstance(dp, dict):
             dp.pop("done", None)  # thousands of commit keys; not useful in the report
@@ -665,6 +861,10 @@ def build_report(write: bool = True) -> dict:
         "split_seed": split.SEED,
         "dev_fraction": split.DEV_FRACTION,
         "bootstrap_draws": BOOTSTRAP,
+        "calibration_metric": fusion.CALIBRATION_METRIC,
+        "datasets": sorted(d for d in datasets if d),
+        "reposvul_labels": os.getenv("REALWORLD_REPOSVUL_LABELS", "llm") if "reposvul" in datasets else None,
+        "bootstrap_unit": "repository",
         "phase3": os.getenv("REALWORLD_PHASE3", "1"),
         "workers": os.getenv("REALWORLD_WORKERS", "1"),
         "num_ctx": os.getenv("OLLAMA_NUM_CTX", "4096"),

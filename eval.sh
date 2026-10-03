@@ -1,5 +1,5 @@
 #!/bin/bash
-# Real-world evaluation (CVEfixes + VUDENC) running in the background on the DGX.
+# Real-world evaluation (ReposVul by default) running in the background on the DGX.
 #
 #   ./eval.sh start     check GPU + Joern, then start in background (survives SSH drops)
 #   ./eval.sh check     is the model on GPU at a usable speed, and is Joern up?
@@ -8,10 +8,12 @@
 #   ./eval.sh report    write eval_results/<run>/report_latest.{md,json} now
 #   ./eval.sh stop      stop it; `start` later resumes from the checkpoint
 #   ./eval.sh retry     after completion: re-run samples whose LLM calls failed
-#   ./eval.sh smoke     ~20 min foreground test on 3+2 pairs (separate dirs)
+#   ./eval.sh smoke     ~20 min foreground test on 5 ReposVul pairs (separate dirs)
 #
-# Results go to eval_results/$REALWORLD_RUN (default realworld_v3); the dataset
-# in workspace/realworld is built once and shared by every run.
+# Results go to eval_results/$REALWORLD_RUN (default reposvul_v5); the dataset
+# in workspace/$REALWORLD_DATA (default realworld_reposvul) is built once and
+# shared by every run. Re-score an old CVEfixes/VUDENC run with
+#   REALWORLD_DATA=realworld REALWORLD_RUN=realworld_v3 ./eval.sh report
 # Pick the GPUs first with ./start.sh (it writes them to .env); for a fast
 # run on free GPUs: ./start.sh --replicas 4, which also sets the workers.
 # FORCE=1 ./eval.sh start skips the GPU check.
@@ -20,7 +22,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 export REALWORLD_GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-export REALWORLD_RUN="${REALWORLD_RUN:-realworld_v3}"
+export REALWORLD_RUN="${REALWORLD_RUN:-reposvul_v5}"
+export REALWORLD_DATA="${REALWORLD_DATA:-realworld_reposvul}"
 DC="docker compose --profile eval --profile replicas"
 M="python -m hackersec.evaluation.realworld"
 RESULTS="eval_results/$REALWORLD_RUN"
@@ -121,8 +124,8 @@ case "${1:-status}" in
       -e REALWORLD_DIR=/app/workspace/realworld_smoke \
       -e REALWORLD_RESULTS_DIR=/app/eval_results/realworld_smoke \
       -e SEMGREP_RULES_DIR=/app/workspace/realworld_smoke/semgrep_rules \
-      eval sh -c "rm -rf /app/eval_results/realworld_smoke \
-                  && $M build --target-cvefixes 3 --target-vudenc 2 \
+      eval sh -c "rm -rf /app/eval_results/realworld_smoke /app/workspace/realworld_smoke \
+                  && $M build --datasets reposvul --target-reposvul 5 \
                   && HF_HUB_OFFLINE=1 $M run \
                   && HF_HUB_OFFLINE=1 $M report"
     echo ""

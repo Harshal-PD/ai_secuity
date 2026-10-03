@@ -9,7 +9,9 @@ Per sample:
      sources/sinks whose flows Joern then checks (IRIS).
   3. One Joern session: taint flows for every finding plus the labelled sinks.
   4. RAG definitions for every finding.
-  5. Board debates, each with several Judge votes:
+  5. Board debates; the Judge names the dangerous line and the check it
+     needs before voting, and its quote of that check is verified against
+     the code:
        sast debate  -- SAST findings only, no context (the Phase 2 system)
        full debate  -- SAST + taint + auditor candidates, with same-file
                        callers/callees (the Phase 3 system)
@@ -40,7 +42,7 @@ from hackersec.evaluation.realworld import sast_cache, split, state
 
 logger = logging.getLogger(__name__)
 
-PIPELINE_VERSION = "v3-candidates-board"
+PIPELINE_VERSION = "v5-guard-check"
 MIN_FREE_GB = float(os.getenv("REALWORLD_MIN_FREE_GB", "5"))
 USE_CPG = os.getenv("REALWORLD_USE_CPG", "1") not in ("0", "false", "False")
 PHASE3 = os.getenv("REALWORLD_PHASE3", "1") not in ("0", "false", "False")
@@ -159,6 +161,7 @@ def _finding_summary(f) -> dict:
 def _board_summary(res: dict) -> dict:
     attacker, defender = res.get("attacker") or {}, res.get("defender") or {}
     evidence = res.get("evidence_check") or {}
+    guard = res.get("guard_check") or {}
     votes = res.get("votes") or []
     first = next((v for v in votes if v.get("status") == "success"), {})
     return {
@@ -176,6 +179,11 @@ def _board_summary(res: dict) -> dict:
         "defender_status": defender.get("status"),
         "evidence_grounded": evidence.get("grounded"),
         "evidence_reason": evidence.get("reason"),
+        "guard_grounded": guard.get("grounded"),
+        "guard_reason": guard.get("reason"),
+        "guard_grounded_share": res.get("guard_grounded_share"),
+        "dangerous_operation": (first.get("dangerous_operation") or "")[:200],
+        "required_check": (first.get("required_check") or "")[:200],
         "code_truncated": res.get("code_truncated"),
         "context_overflow": res.get("context_overflow"),
         "max_prompt_tokens": res.get("max_prompt_tokens"),
@@ -399,6 +407,8 @@ class Evaluator:
                 "n_candidates": {"sast": len(sast), "taint": len(taint), "auditor": len(auditor)},
                 "auditor": {
                     "status": hunt_res.get("status"),
+                    "verdict": hunt_res.get("verdict"),
+                    "p_vulnerable": hunt_res.get("p_vulnerable"),
                     "candidates": [{"line": c["line"], "cwe": c["cwe"], "confidence": c["confidence"]}
                                    for c in hunt_res.get("candidates") or []],
                 },

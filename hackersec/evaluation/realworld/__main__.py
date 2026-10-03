@@ -9,6 +9,7 @@
 import argparse
 import json
 import logging
+import os
 import sys
 import time
 
@@ -122,9 +123,11 @@ def main() -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     b = sub.add_parser("build", help="download datasets + offline assets (needs internet)")
-    b.add_argument("--datasets", default="cvefixes,vudenc")
+    b.add_argument("--datasets", default=os.getenv("REALWORLD_DATASETS", "cvefixes,vudenc"),
+                   help="comma-separated: cvefixes, vudenc, reposvul")
     b.add_argument("--target-cvefixes", type=int, default=None, help="function pairs (default 500)")
     b.add_argument("--target-vudenc", type=int, default=None, help="function pairs (default 250)")
+    b.add_argument("--target-reposvul", type=int, default=None, help="function pairs (default 1000)")
 
     r = sub.add_parser("run", help="evaluate every sample with the full pipeline (offline)")
     r.add_argument("--retry-failed", action="store_true", help="re-run samples that failed")
@@ -150,6 +153,8 @@ def main() -> int:
             targets["cvefixes"] = args.target_cvefixes
         if args.target_vudenc is not None:
             targets["vudenc"] = args.target_vudenc
+        if args.target_reposvul is not None:
+            targets["reposvul"] = args.target_reposvul
         build_all([d.strip() for d in args.datasets.split(",") if d.strip()], targets)
     elif args.cmd == "run":
         from hackersec.evaluation.realworld.runner import run_evaluation

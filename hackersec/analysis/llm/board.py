@@ -48,11 +48,15 @@ TEMP_JUDGE = float(os.getenv("LLM_TEMP_JUDGE", "0.0"))
 
 # Confidence floor applied when the evidence rule overturns a FALSE_POSITIVE.
 OVERRIDE_CONFIDENCE_FLOOR = 0.5
+# The Judge is asked to copy its guard exactly, so most of the quote must be
+# one contiguous span of the code, not just a shared fragment.
+GUARD_MIN_COVERAGE = 0.8
 
-# Function-level review: the Judge is sampled several times and the share of
-# VULNERABLE votes is the board's score (self-consistency, Wang et al. 2023),
-# which is better calibrated than one self-reported confidence.
-JUDGE_VOTES = int(os.getenv("LLM_JUDGE_VOTES", "5"))
+# Function-level review: with more than one vote the Judge is sampled at
+# TEMP_JUDGE_VOTE and the share of VULNERABLE votes is the score
+# (self-consistency, Wang et al. 2023). Sampled votes on this model almost
+# always agree, so the default is one vote at TEMP_JUDGE.
+JUDGE_VOTES = int(os.getenv("LLM_JUDGE_VOTES", "1"))
 TEMP_JUDGE_VOTE = float(os.getenv("LLM_JUDGE_VOTE_TEMP", "0.7"))
 # signal   -- the evidence check is recorded as a feature, never flips a vote
 # override -- a SAFE majority whose sanitizer quote is not in the code is
@@ -62,7 +66,7 @@ EVIDENCE_MODE = os.getenv("LLM_EVIDENCE_MODE", "signal").strip().lower()
 # Answer caps for the function-level seats. A capped, unfinished JSON answer
 # is parsed as a failed vote rather than stalling a parallel slot.
 SEAT_MAX_TOKENS = 800
-VOTE_MAX_TOKENS = 500
+VOTE_MAX_TOKENS = 700
 
 
 class AdversarialBoard:
@@ -216,9 +220,10 @@ class AdversarialBoard:
         """
         One debate over a whole function and all of its candidate findings.
 
-        Attacker and Defender argue once; the Judge then votes `votes` times at
-        a non-zero temperature with different seeds. `p_vulnerable` is the mean
-        of the votes' P(vulnerable), and `prediction` is the majority vote
+        Attacker and Defender argue once; the Judge then votes `votes` times,
+        at TEMP_JUDGE_VOTE with different seeds when there is more than one
+        vote. `p_vulnerable` is the mean of the votes' P(vulnerable), and
+        `prediction` is the majority vote
         (after the evidence rule, when that is set to override). `context`
         (same-file callers and callees) is shown to every seat and takes its
         room from the code budget.
@@ -261,8 +266,9 @@ class AdversarialBoard:
 
         judge_prompt = build_function_judge_prompt(function_name, code_text, findings, attacker, defender, context)
         ballots = []
+        vote_temp = TEMP_JUDGE_VOTE if votes > 1 else TEMP_JUDGE
         for i in range(votes):
-            res = call(judge_prompt, self.model_judge, TEMP_JUDGE_VOTE, seed=1000 + i, max_tokens=VOTE_MAX_TOKENS)
+            res = call(judge_prompt, self.model_judge, vote_temp, seed=1000 + i, max_tokens=VOTE_MAX_TOKENS)
             if res["llm_status"] != "success":
                 return self._transport_failure(res)
             ballots.append(parse_vote_response(res["response"]))
@@ -276,6 +282,13 @@ class AdversarialBoard:
         else:
             # No readable vote: keep the static finding rather than dismiss it.
             vote_share, p_vuln, prediction, verdict_source = None, None, 1, "unparseable_votes"
+
+        # The Judge's quoted guard, checked against the code like the
+        # Defender's sanitizer. A fix usually adds exactly such a check, so
+        # whether it is really present can differ between the two versions
+        # of a function even when the rest of the code is identical.
+        guards = [check_sanitizer_evidence(code, b.get("check_in_code"), GUARD_MIN_COVERAGE) for b in valid]
+        guard_share = sum(g["grounded"] for g in guards) / len(guards) if guards else None
 
         if mode == "override" and prediction == 0 and not evidence["grounded"]:
             prediction, verdict_source = 1, "evidence_rule"
@@ -293,6 +306,8 @@ class AdversarialBoard:
             "defender": defender,
             "evidence_check": evidence,
             "evidence_mode": mode,
+            "guard_check": guards[0] if guards else None,
+            "guard_grounded_share": None if guard_share is None else round(guard_share, 4),
             "verdict_source": verdict_source,
             "code_truncated": code_truncated,
             "max_prompt_tokens": max_prompt,

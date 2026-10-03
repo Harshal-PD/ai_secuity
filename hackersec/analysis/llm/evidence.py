@@ -47,9 +47,14 @@ def _normalize(text: str) -> str:
     return _STRIP_CHARS.sub("", text.lower())
 
 
-def check_sanitizer_evidence(snippet: str | None, evidence: str | None) -> dict:
+def check_sanitizer_evidence(snippet: str | None, evidence: str | None, min_coverage: float = 0.0) -> dict:
     """
     Verify the Defender's quoted sanitizer against the analyzed snippet.
+
+    `min_coverage` is the share of the (normalized) quote that must be one
+    contiguous span of the snippet. 0 accepts prose that contains a real code
+    span; a quote that is supposed to be copied code should use a high value,
+    or `x.startswith(ROOT)` would be grounded by any `.startswith(`.
 
     Returns a record that is stored verbatim on the finding so the override is
     auditable:
@@ -87,7 +92,7 @@ def check_sanitizer_evidence(snippet: str | None, evidence: str | None) -> dict:
 
     # Short quotes must match almost entirely; long prose quotes only need to
     # contain one real code span.
-    required = min(MIN_SPAN, len(norm_evidence))
+    required = max(min(MIN_SPAN, len(norm_evidence)), int(min_coverage * len(norm_evidence) + 0.999))
     record["required_span"] = required
 
     match = SequenceMatcher(None, norm_evidence, norm_snippet).find_longest_match(

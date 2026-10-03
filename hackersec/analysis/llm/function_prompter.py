@@ -13,7 +13,7 @@ from hackersec.analysis.schema import Finding
 # Rough characters per token for Python source under the Qwen tokenizer.
 CHARS_PER_TOKEN = 3.2
 # Instructions, schema, and the other seats' arguments, plus room to answer.
-RESERVED_TOKENS = 1900
+RESERVED_TOKENS = 2100
 MIN_CODE_CHARS = 2500
 MAX_FINDINGS_CHARS = 1800
 MAX_RAG_CHARS = 1000
@@ -192,12 +192,20 @@ Self-reported safety: {defender.get("safety_confidence", "unstated")}
 Rules:
 1. Decide from the code itself. The arguments are aids; neither side's rhetoric or confidence numbers decide the case.
 2. Candidate findings are frequently false alarms. A finding only makes the function vulnerable if attacker-controlled input can actually reach the flagged operation without being neutralized.
-3. A defence counts only if the neutralizing code is really present in the function shown.
-4. Report calibrated confidence in your verdict: 0.5 means genuinely unsure, 0.9 means you would bet heavily. Do not inflate it.
-5. Use ONLY the reference definitions for the vulnerability class. Never cite a CWE or CVE from memory.
-6. {_INJECTION_GUARD}
-7. Output one JSON object exactly matching this schema:
+3. Work in this order, before giving the verdict:
+   a. dangerous_operation: the one line where attacker-influenced input could do harm (a query, a file path, a shell or eval call, a redirect, a permission decision, an unbounded loop or allocation), or "none".
+   b. required_check: the specific check that would make that line safe (an authorization test, a path normalization plus base-directory check, escaping, a bound parameter, an allowlist, a size or depth limit).
+   c. check_in_code: that check copied exactly from the function, without the line-number prefix, if it is present on the path to the dangerous line; otherwise "none found".
+   The verdict follows from these: VULNERABLE when the required check is missing or can be bypassed on that path, NOT_VULNERABLE when the check is present and covers the input or when there is no dangerous operation.
+4. A defence counts only if the neutralizing code is really present in the function shown.
+5. Report calibrated confidence in your verdict: 0.5 means genuinely unsure, 0.9 means you would bet heavily. Do not inflate it.
+6. Use ONLY the reference definitions for the vulnerability class. Never cite a CWE or CVE from memory.
+7. {_INJECTION_GUARD}
+8. Output one JSON object exactly matching this schema, fields in this order:
    {{
+     "dangerous_operation": "line number and the call or statement, or 'none'",
+     "required_check": "the check that would make it safe",
+     "check_in_code": "exact code of that check, or 'none found'",
      "verdict": "VULNERABLE" or "NOT_VULNERABLE",
      "confidence": 0.0 to 1.0 (float, certainty in the verdict itself),
      "finding_ids": ["F1"],
