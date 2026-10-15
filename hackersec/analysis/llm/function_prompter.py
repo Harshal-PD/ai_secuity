@@ -13,7 +13,7 @@ from hackersec.analysis.schema import Finding
 # Rough characters per token for Python source under the Qwen tokenizer.
 CHARS_PER_TOKEN = 3.2
 # Instructions, schema, and the other seats' arguments, plus room to answer.
-RESERVED_TOKENS = 2100
+RESERVED_TOKENS = 1900
 MIN_CODE_CHARS = 2500
 MAX_FINDINGS_CHARS = 1800
 MAX_RAG_CHARS = 1000
@@ -69,7 +69,7 @@ def _format_taint(f: Finding) -> str:
         flows = cpg["taint_paths"][:2]
         return " | ".join(_format_flow(p) for p in flows)
     if status == "no_flow_found":
-        return "Joern found no flow from a parameter or user input into this call"
+        return "no direct flow found by Joern (inconclusive: CPG taint does not track self.*, dicts, or decorators)"
     return "no data-flow information"
 
 
@@ -103,7 +103,7 @@ def _evidence_packet(function_name: str, code_text: str, findings: list[Finding]
     return f"""===== FUNCTION UNDER REVIEW: {function_name} =====
 
 ===== CANDIDATE FINDINGS (leads, often false alarms) =====
-Sources: semgrep/bandit = static rules, llm_taint = a labelled source reaches a labelled sink, llm_auditor = an LLM's guess.
+Sources: semgrep and bandit, both static rules.
 "data flow" (Joern) only shows that a parameter or input reaches the flagged line; it does not show whether the value is validated, escaped, or passed as a bound parameter.
 {format_findings(findings)}
 
@@ -140,29 +140,49 @@ Rules:
 Respond with the JSON object only, starting with {{:"""
 
 
-def build_function_defender_prompt(
-    function_name: str, code_text: str, findings: list[Finding], attacker: dict, context: str = ""
-) -> str:
-    return f"""You are the DEFENDER on an application security review board (Blue Team).
-Argue that the function below is NOT exploitable as written, and rebut the Attacker's specific claim.
+def _format_evidence_status(evidence: dict | None) -> str:
+    if not evidence:
+        return ""
+    if evidence.get("grounded"):
+        span = _clip(evidence.get("matched_span"), 80)
+        return (
+            f"\nAutomated quote check: VERIFIED (matched span `{span}`) — the Defender's quote exists in the "
+            "function; check whether it actually neutralizes the flagged operation on every path."
+        )
+    if evidence.get("reason") == "conceded":
+        return "\nAutomated quote check: NONE — the Defender conceded ('none found') and cited no sanitizer in the function."
+    return (
+        "\nAutomated quote check: FAILED — the Defender's sanitization_evidence was NOT found verbatim in the "
+        "function; disregard any claimed sanitizer not visible in the code below."
+    )
 
+
+def build_function_defender_prompt(
+    function_name: str, code_text: str, findings: list[Finding], attacker: dict | None = None, context: str = ""
+) -> str:
+    claim_block = ""
+    if attacker:
+        claim_block = f"""
 ===== ATTACKER'S CLAIM =====
 Findings: {attacker.get("finding_ids") or "none named"}
 Vulnerability: {_clip(attacker.get("vulnerability"), ARGUMENT_CHARS)}
 Exploit path: {_clip(attacker.get("exploit_path"), ARGUMENT_CHARS)}
 Preconditions: {_clip(attacker.get("preconditions"), 300)}
-
+"""
+    return f"""You are the DEFENDER on an application security review board (Blue Team).
+Argue that the function below is NOT exploitable as written, and rebut the candidate findings.
+{claim_block}
 Rules:
 1. Look for concrete neutralization in the code: parameterized queries, int()/float() casts, allowlists, validation, escaping, shell=False, safe loaders, framework auto-escaping, or input that is not attacker-controlled at all.
 2. Copy the exact code that neutralizes the input into sanitization_evidence, character for character, without the line-number prefix.
-3. If nothing in the code neutralizes the Attacker's path, write "none found" and give a low safety_confidence. Never invent code that is not shown.
+3. If nothing in the code neutralizes the flagged operation, write "none found" and give a low safety_confidence. Never invent code that is not shown, and do not assume unseen callers validate the input.
 4. Use ONLY the reference definitions for the vulnerability class.
 5. {_INJECTION_GUARD}
 6. Output one JSON object exactly matching this schema:
    {{
      "sanitization_evidence": "exact code copied from the function, or 'none found'",
      "mitigating_controls": "Framework, configuration, or call-site controls that reduce risk...",
-     "rebuttal": "Why the Attacker's path fails, or a concession if it holds...",
+     "rebuttal": "Why the candidate finding is safe, or a concession if it is exploitable...",
      "safety_confidence": 0.0 to 1.0 (float)
    }}
 
@@ -172,7 +192,13 @@ Respond with the JSON object only, starting with {{:"""
 
 
 def build_function_judge_prompt(
-    function_name: str, code_text: str, findings: list[Finding], attacker: dict, defender: dict, context: str = ""
+    function_name: str,
+    code_text: str,
+    findings: list[Finding],
+    attacker: dict,
+    defender: dict,
+    context: str = "",
+    evidence: dict | None = None,
 ) -> str:
     return f"""You are the JUDGE on an application security review board.
 Decide whether the function below, AS WRITTEN, contains an exploitable security vulnerability.
@@ -184,28 +210,21 @@ Exploit path: {_clip(attacker.get("exploit_path"), ARGUMENT_CHARS)}
 Self-reported exploitability: {attacker.get("exploitability_confidence", "unstated")}
 
 ===== DEFENDER (Blue Team) =====
-Sanitization evidence: {_clip(defender.get("sanitization_evidence"), 400)}
+Sanitization evidence: {_clip(defender.get("sanitization_evidence"), 400)}{_format_evidence_status(evidence)}
 Mitigating controls: {_clip(defender.get("mitigating_controls"), 400)}
 Rebuttal: {_clip(defender.get("rebuttal"), ARGUMENT_CHARS)}
 Self-reported safety: {defender.get("safety_confidence", "unstated")}
 
 Rules:
 1. Decide from the code itself. The arguments are aids; neither side's rhetoric or confidence numbers decide the case.
-2. Candidate findings are frequently false alarms. A finding only makes the function vulnerable if attacker-controlled input can actually reach the flagged operation without being neutralized.
-3. Work in this order, before giving the verdict:
-   a. dangerous_operation: the one line where attacker-influenced input could do harm (a query, a file path, a shell or eval call, a redirect, a permission decision, an unbounded loop or allocation), or "none".
-   b. required_check: the specific check that would make that line safe (an authorization test, a path normalization plus base-directory check, escaping, a bound parameter, an allowlist, a size or depth limit).
-   c. check_in_code: that check copied exactly from the function, without the line-number prefix, if it is present on the path to the dangerous line; otherwise "none found".
-   The verdict follows from these: VULNERABLE when the required check is missing or can be bypassed on that path, NOT_VULNERABLE when the check is present and covers the input or when there is no dangerous operation.
-4. A defence counts only if the neutralizing code is really present in the function shown.
+2. Candidate findings are frequently false alarms. A finding makes the function vulnerable if input an attacker can influence (a function parameter, request/CLI/file/env data, or state controlled by a caller) can reach the flagged operation without being neutralized.
+3. A defence counts only if the neutralizing code is really present in the function shown (or in SAME-FILE CONTEXT) and verified by the Automated quote check above. Do NOT assume that unseen callers validate or sanitize arguments before calling this function.
+4. If Joern data flow says no direct flow was found, treat that as inconclusive rather than proof of safety: static CPG taint misses flows through object attributes (self.*), dicts, callbacks, and decorators.
 5. Report calibrated confidence in your verdict: 0.5 means genuinely unsure, 0.9 means you would bet heavily. Do not inflate it.
 6. Use ONLY the reference definitions for the vulnerability class. Never cite a CWE or CVE from memory.
 7. {_INJECTION_GUARD}
-8. Output one JSON object exactly matching this schema, fields in this order:
+8. Output one JSON object exactly matching this schema:
    {{
-     "dangerous_operation": "line number and the call or statement, or 'none'",
-     "required_check": "the check that would make it safe",
-     "check_in_code": "exact code of that check, or 'none found'",
      "verdict": "VULNERABLE" or "NOT_VULNERABLE",
      "confidence": 0.0 to 1.0 (float, certainty in the verdict itself),
      "finding_ids": ["F1"],

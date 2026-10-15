@@ -166,9 +166,10 @@ class JoernClient:
         sink_name: str | None = None,
         source_regex: str | None = None,
         method_line: int | None = None,
+        line_end: int | None = None,
     ) -> dict:
         """
-        Data flows from untrusted sources into the call on `line_num`.
+        Data flows from untrusted sources into the call on `line_num`..`line_end`.
 
         `workspace_name` is unused (the imported project is active); it stays
         in the signature for existing callers. The optional arguments apply an
@@ -180,6 +181,7 @@ class JoernClient:
             sink_name=sink_name,
             extra_source_regex=source_regex,
             method_line=method_line,
+            sink_end_line=line_end,
         )
         try:
             res = self._execute_raw(query)

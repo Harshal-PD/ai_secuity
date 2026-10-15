@@ -76,16 +76,16 @@ def _check(wait: int) -> int:
     from concurrent.futures import ThreadPoolExecutor
 
     from hackersec.analysis.joern.client import JoernClient
-    from hackersec.analysis.llm.client import MODEL_ATTACKER, MODEL_DEFENDER, MODEL_HUNTER, MODEL_JUDGE, OllamaClient
+    from hackersec.analysis.llm.client import MODEL_ATTACKER, MODEL_DEFENDER, MODEL_JUDGE, OllamaClient
     from hackersec.evaluation.realworld.runner import (
-        MIN_TOKENS_PER_SEC, PHASE3, REQUIRE_GPU, USE_CPG, WORKERS, joern_urls, ollama_urls,
+        BASELINES, MIN_TOKENS_PER_SEC, REQUIRE_GPU, USE_CPG, WORKERS, joern_urls, ollama_urls,
     )
 
-    models = sorted({MODEL_ATTACKER, MODEL_DEFENDER, MODEL_JUDGE} | ({MODEL_HUNTER} if PHASE3 else set()))
+    models = sorted({MODEL_ATTACKER, MODEL_DEFENDER, MODEL_JUDGE})
     clients = [OllamaClient(u) for u in ollama_urls()]
     joerns = [JoernClient(u) for u in joern_urls()] if USE_CPG else []
     print(f"{WORKERS} workers over {len(clients)} Ollama and {len(joerns)} Joern server(s); "
-          f"phase 3 {'on' if PHASE3 else 'off'}")
+          f"baselines {', '.join(sorted(BASELINES)) or 'off'}")
 
     def ollama_health(client):
         return client, [(m, client.health(m, min_tokens_per_sec=MIN_TOKENS_PER_SEC, require_gpu=REQUIRE_GPU))
@@ -123,7 +123,7 @@ def main() -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     b = sub.add_parser("build", help="download datasets + offline assets (needs internet)")
-    b.add_argument("--datasets", default=os.getenv("REALWORLD_DATASETS", "cvefixes,vudenc"),
+    b.add_argument("--datasets", default=os.getenv("REALWORLD_DATASETS", "cvefixes,vudenc,reposvul"),
                    help="comma-separated: cvefixes, vudenc, reposvul")
     b.add_argument("--target-cvefixes", type=int, default=None, help="function pairs (default 500)")
     b.add_argument("--target-vudenc", type=int, default=None, help="function pairs (default 250)")

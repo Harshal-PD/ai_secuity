@@ -21,7 +21,12 @@ def _relative_to(path: str, root: Path) -> str:
 
 
 def enrich_with_cpg(
-    findings: list, target_path: Path, job_id: str = "standalone", client=None, extra=None
+    findings: list,
+    target_path: Path,
+    job_id: str = "standalone",
+    client=None,
+    extra=None,
+    method_line: int | None = None,
 ) -> str:
     """
     Attach Joern taint flows to each finding. Returns a status string.
@@ -61,7 +66,9 @@ def enrich_with_cpg(
         for f in findings:
             rel = _relative_to(f.file_path, root)
             try:
-                f.cpg_context = joern_client.query_taint(project, rel, f.line_start)
+                f.cpg_context = joern_client.query_taint(
+                    project, rel, f.line_start, method_line=method_line, line_end=f.line_end
+                )
             except (JoernConnectionError, JoernQueryError) as e:
                 failed += 1
                 f.cpg_context = {"cpg_status": "failed", "error": str(e)[:300]}
@@ -99,14 +106,10 @@ def enrich_with_rag(findings: list, job_id: str = "standalone", rag=None) -> str
             rag = LocalRAGStore()
         store = rag
         for f in findings:
-            query_str = f"Security vulnerability {f.rule_id} "
-            if f.cwe_ids:
-                query_str += " ".join(f.cwe_ids)
-            if f.owasp_category:
-                query_str += f" {f.owasp_category}"
-
-            logger.info(f"[{job_id}] RAG query: {query_str}")
-            f.rag_docs = store.search(query_str, top_k=2)
+            logger.info(f"[{job_id}] RAG lookup: {f.rule_id} {f.cwe_ids}")
+            f.rag_docs = store.retrieve_for_finding(
+                f.rule_id, f.cwe_ids, f.owasp_category, f.message or "", top_k=2
+            )
 
         logger.info(f"[{job_id}] RAG enrichment complete")
         return "success"

@@ -1,20 +1,17 @@
 """
-Phase 2/3 — run the full pipeline over every sample, fully offline.
+Run the SAST-gated pipeline over every sample, fully offline.
 
 Per sample:
   1. Semgrep + Bandit on the whole file (cached; batched before the loop),
      keeping findings inside the target function.
-  2. Phase 3 candidates (REALWORLD_PHASE3=1): an LLM auditor proposes
-     vulnerabilities (GPTLens), and the LLM labels the function's calls as
-     sources/sinks whose flows Joern then checks (IRIS).
-  3. One Joern session: taint flows for every finding plus the labelled sinks.
-  4. RAG definitions for every finding.
-  5. Board debates; the Judge names the dangerous line and the check it
-     needs before voting, and its quote of that check is verified against
-     the code:
-       sast debate  -- SAST findings only, no context (the Phase 2 system)
-       full debate  -- SAST + taint + auditor candidates, with same-file
-                       callers/callees (the Phase 3 system)
+  2. Comparison baselines (REALWORLD_BASELINES): the same model, one prompt,
+     no static findings — the function alone, and the function plus same-file
+     callers and callees. These are not part of the shipped pipeline.
+  3. One Joern session for taint flows on the static findings, when there
+     are any. Files static analysis did not flag skip Joern.
+  4. RAG definitions for those findings.
+  5. One board debate over the static findings only. Functions with no
+     finding are predicted safe and cost no board tokens.
 Fusion and calibrated thresholds are fitted on the dev split at report time.
 
 Several workers run in parallel (REALWORLD_WORKERS), spread round-robin over
@@ -42,10 +39,13 @@ from hackersec.evaluation.realworld import sast_cache, split, state
 
 logger = logging.getLogger(__name__)
 
-PIPELINE_VERSION = "v5-guard-check"
+PIPELINE_VERSION = "v6-sast-gate"
 MIN_FREE_GB = float(os.getenv("REALWORLD_MIN_FREE_GB", "5"))
 USE_CPG = os.getenv("REALWORLD_USE_CPG", "1") not in ("0", "false", "False")
-PHASE3 = os.getenv("REALWORLD_PHASE3", "1") not in ("0", "false", "False")
+# function = whole function, no findings; context = that plus same-file callers.
+# "0" records neither. Both are baselines; the shipped system is the SAST board.
+_BASELINE_RAW = os.getenv("REALWORLD_BASELINES", "function,context").strip().lower()
+BASELINES = set() if _BASELINE_RAW in ("", "0", "false", "off") else {p.strip() for p in _BASELINE_RAW.split(",") if p.strip()}
 REQUIRE_GPU = os.getenv("REALWORLD_REQUIRE_GPU", "1") not in ("0", "false", "False")
 MIN_TOKENS_PER_SEC = float(os.getenv("REALWORLD_MIN_TOKENS_PER_SEC", "3"))
 # Ollama can reload a model onto CPU mid-run (e.g. after another user's job
@@ -57,9 +57,6 @@ CPG_ATTEMPTS = 3
 # Samples recorded while Joern was failing have no taint evidence; redo them
 # on the next start instead of reporting them as normal results.
 REDO_CPG_FAILED = os.getenv("REALWORLD_REDO_CPG_FAILED", "1") not in ("0", "false", "False")
-# Candidates shown in the full debate, per source.
-MAX_SAST, MAX_TAINT, MAX_AUDITOR = 6, 3, 3
-
 _stop = False
 
 
@@ -149,10 +146,13 @@ def _in_function(f, sample: dict) -> bool:
 
 
 def _finding_summary(f) -> dict:
+    from hackersec.analysis.dedup import has_tool
+
     cpg = f.cpg_context or {}
     return {
         "rule_id": f.rule_id,
         "tool": f.tool,
+        "also_bandit": has_tool(f, "bandit") and f.tool != "bandit",
         "severity": f.severity,
         "line": f.line_start,
         "cwe_ids": f.cwe_ids,
@@ -165,7 +165,6 @@ def _finding_summary(f) -> dict:
 def _board_summary(res: dict) -> dict:
     attacker, defender = res.get("attacker") or {}, res.get("defender") or {}
     evidence = res.get("evidence_check") or {}
-    guard = res.get("guard_check") or {}
     votes = res.get("votes") or []
     first = next((v for v in votes if v.get("status") == "success"), {})
     return {
@@ -183,11 +182,6 @@ def _board_summary(res: dict) -> dict:
         "defender_status": defender.get("status"),
         "evidence_grounded": evidence.get("grounded"),
         "evidence_reason": evidence.get("reason"),
-        "guard_grounded": guard.get("grounded"),
-        "guard_reason": guard.get("reason"),
-        "guard_grounded_share": res.get("guard_grounded_share"),
-        "dangerous_operation": (first.get("dangerous_operation") or "")[:200],
-        "required_check": (first.get("required_check") or "")[:200],
         "code_truncated": res.get("code_truncated"),
         "context_overflow": res.get("context_overflow"),
         "max_prompt_tokens": res.get("max_prompt_tokens"),
@@ -239,13 +233,13 @@ class Evaluator:
     def __init__(self, index: int, shared: Shared):
         from hackersec.analysis.llm.board import AdversarialBoard
         from hackersec.analysis.llm.client import (
-            MODEL_ATTACKER, MODEL_DEFENDER, MODEL_HUNTER, MODEL_JUDGE, OllamaClient,
+            MODEL_ATTACKER, MODEL_DEFENDER, MODEL_JUDGE, OllamaClient,
         )
 
         urls = ollama_urls()
         self.client = OllamaClient(urls[index % len(urls)])
-        self.model_hunter = MODEL_HUNTER
-        self.models = sorted({MODEL_ATTACKER, MODEL_DEFENDER, MODEL_JUDGE} | ({MODEL_HUNTER} if PHASE3 else set()))
+        self.model_judge = MODEL_JUDGE
+        self.models = sorted({MODEL_ATTACKER, MODEL_DEFENDER, MODEL_JUDGE})
         self.board = AdversarialBoard(client=self.client, mode="board")
         self.index = index
         self.shared = shared
@@ -273,7 +267,7 @@ class Evaluator:
             self.wait_ready()
         return res
 
-    def _cpg(self, sample: dict, findings: list, extra) -> str:
+    def _cpg(self, sample: dict, findings: list, extra, method_line: int | None = None) -> str:
         from hackersec.analysis.enrich import enrich_with_cpg
 
         # Per-worker project names: two workers may analyse the same file on
@@ -288,38 +282,29 @@ class Evaluator:
                     _wait_for_joern(self.joern)
                     for f in findings:
                         f.cpg_context = None
-                status = enrich_with_cpg(findings, Path(sample["file"]), job_id=job, client=self.joern, extra=extra)
+                status = enrich_with_cpg(
+                    findings, Path(sample["file"]), job_id=job, client=self.joern, extra=extra, method_line=method_line
+                )
                 if status != "failed":
                     break
                 logger.warning(f"CPG import failed for {sample['sample_id']} on {self.joern.base_url} "
                                f"(attempt {attempt + 1}/{CPG_ATTEMPTS})")
         return status
 
-    def _candidates(self, sample: dict, code: str, context: str) -> tuple[list, dict, list, dict] | None:
-        """Auditor findings and IRIS sink sites; None if Ollama kept failing."""
+    def _baseline(self, name: str, code: str, start: int, context: str) -> dict | None:
+        """One no-SAST review. None means Ollama kept failing."""
+        from hackersec.analysis.llm.baseline import review
         from hackersec.analysis.llm.function_prompter import MIN_CODE_CHARS, code_budget, fit_function_code
-        from hackersec.analysis.llm.hunter import hunt
-        from hackersec.analysis.llm.taint_specs import candidate_calls, infer_specs, sink_sites
 
-        start, end, name = sample["line_start"], sample["line_end"], sample["function"]
         budget = max(MIN_CODE_CHARS, code_budget(self.client.num_ctx) - len(context))
         code_text, _ = fit_function_code(code, start, [], budget)
-
-        h = self._llm(lambda: hunt(self.client, self.model_hunter, name, code_text, start, end, context))
-        if h.get("llm_status") != "success":
-            return None
-        calls = candidate_calls(code, start)
-        sp = self._llm(lambda: infer_specs(self.client, self.model_hunter, name, code_text, calls))
-        if sp.get("llm_status") != "success":
-            return None
-        return h, sp, sink_sites(sp.get("sinks") or []), {"n_calls": len(calls)}
+        res = self._llm(lambda: review(self.client, self.model_judge, name, code_text, context))
+        return res if res.get("llm_status") == "success" else None
 
     def evaluate(self, sample: dict, meta: dict) -> dict:
+        from hackersec.analysis.dedup import has_tool
         from hackersec.analysis.enrich import enrich_with_rag
-        from hackersec.analysis.joern.queries import source_regex
         from hackersec.analysis.llm.context import function_context
-        from hackersec.analysis.llm.hunter import hunter_findings
-        from hackersec.analysis.llm.taint_specs import taint_findings
 
         started = time.time()
         record = {
@@ -339,99 +324,59 @@ class Evaluator:
 
         with open(sample["file"], "r", encoding="utf-8", errors="replace") as fh:
             source = fh.read()
-        file_lines = source.splitlines()
         start, end = sample["line_start"], sample["line_end"]
-        code = "\n".join(file_lines[start - 1 : end])
+        code = "\n".join(source.splitlines()[start - 1 : end])
 
         file_findings, sast_status = sast_cache.findings_for(sample["file"])
         sast = [copy.deepcopy(f) for f in file_findings if _in_function(f, sample)]
-        record.update(file_findings=len(file_findings), n_findings=len(sast), sast_status=sast_status,
-                      sast_pred=int(bool(sast)))
+        record.update(
+            file_findings=len(file_findings), n_findings=len(sast), sast_status=sast_status,
+            sast_pred=int(bool(sast)),
+            semgrep_pred=int(any(has_tool(f, "semgrep") for f in sast)),
+            bandit_pred=int(any(has_tool(f, "bandit") for f in sast)),
+        )
 
-        # ── Phase 3 candidates (LLM calls happen outside the Joern lock) ────
-        context, auditor, sites, spec, hunt_res = "", [], [], {}, {}
-        if PHASE3:
-            context = function_context(source, start, end)
-            cand = self._candidates(sample, code, context)
-            if cand is None:
-                return {**record, "status": "llm_failed", "error": "candidate generation failed",
-                        "seconds": round(time.time() - started, 1)}
-            hunt_res, spec, sites, extra_info = cand
-            spec = {**spec, **extra_info}
-            auditor = hunter_findings(hunt_res.get("candidates") or [], sample["file"], file_lines, "realworld")
+        # Extracted once for both the SAST board and the context baseline.
+        context = function_context(source, start, end) if (sast or "context" in BASELINES) else ""
 
-        # ── One Joern session: taint for every finding + labelled sinks ─────
-        site_results = []
-        src_regex = source_regex(spec.get("sources") or [])
+        # ── Baselines: same model, no static findings (outside the Joern lock)
+        tokens = {"board": {"prompt": 0, "completion": 0, "calls": 0}}
+        if BASELINES:
+            for mode, ctx in (("function", ""), ("context", context)):
+                if mode not in BASELINES:
+                    continue
+                key = "llm_only" if mode == "function" else "llm_context"
+                reviewed = self._baseline(sample["function"], code, start, ctx)
+                if reviewed is None:
+                    return {**record, "status": "llm_failed", "error": f"{key} baseline failed",
+                            "seconds": round(time.time() - started, 1)}
+                record[f"{key}_pred"] = reviewed["prediction"]
+                record[f"{key}_p"] = reviewed.get("p_vulnerable")
+                record[key] = {"status": reviewed.get("status"), "verdict": reviewed.get("verdict")}
+                tokens[key] = reviewed.get("tokens") or {"prompt": 0, "completion": 0, "calls": 1}
 
-        def spec_queries(client, project, rel):
-            site_results.clear()
-            for site in sites:
-                site_results.append((site, client.query_taint(
-                    project, rel, site["line"], sink_name=site["call_name"],
-                    source_regex=src_regex, method_line=start,
-                )))
-
+        # ── Joern + RAG only for functions static analysis flagged ──────────
         record["cpg_status"] = "skipped"
-        if self.joern is not None and (sast or auditor or sites):
-            record["cpg_status"] = self._cpg(sample, sast + auditor, spec_queries if sites else None)
-        taint = taint_findings(site_results, sample["file"], file_lines, "realworld")
-        seen, unique_taint = set(), []
-        for f in taint:
-            if f.line_start not in seen:
-                seen.add(f.line_start)
-                unique_taint.append(f)
-        taint = unique_taint
-
-        if self.shared.rag is not None and (sast or auditor or taint):
+        if self.joern is not None and sast:
+            record["cpg_status"] = self._cpg(sample, sast, None, method_line=start)
+        if self.shared.rag is not None and sast:
             with self.shared.rag_lock:
-                enrich_with_rag(sast + auditor + taint, job_id="realworld", rag=self.shared.rag)
+                enrich_with_rag(sast, job_id="realworld", rag=self.shared.rag)
 
-        # ── Phase 2 debate: SAST findings only, no context ──────────────────
+        # ── Shipped system: one debate over the static findings + context ───
         res = None
         if sast:
-            res = self._llm(lambda: self.board.deliberate_function(sample["function"], code, start, sast))
+            res = self._llm(lambda: self.board.deliberate_function(
+                sample["function"], code, start, sast, context=context
+            ))
             if res.get("llm_status") != "success":
                 return {**record, "status": "llm_failed", "error": str(res.get("error"))[:300],
                         "seconds": round(time.time() - started, 1)}
+            tokens["board"] = res.get("tokens") or tokens["board"]
         record.update(_debate_fields(res, "board_pred", "board_override_pred", "p_vulnerable", "vote_share", "board"))
         record["findings"] = [_finding_summary(f) for f in sast]
-
-        # ── Phase 3 debate: every candidate, with same-file context ─────────
-        if PHASE3:
-            union = sast[:MAX_SAST] + taint[:MAX_TAINT] + auditor[:MAX_AUDITOR]
-            full = None
-            if union:
-                full = self._llm(lambda: self.board.deliberate_function(
-                    sample["function"], code, start, union, context=context))
-                if full.get("llm_status") != "success":
-                    return {**record, "status": "llm_failed", "error": str(full.get("error"))[:300],
-                            "seconds": round(time.time() - started, 1)}
-            record.update(_debate_fields(full, "full_pred", "full_override_pred", "full_p_vulnerable",
-                                         "full_vote_share", "full_board"))
-            record.update({
-                "full_findings": [_finding_summary(f) for f in union],
-                "hunter_pred": int(bool(auditor)),
-                "taint_pred": int(bool(taint)),
-                "union_pred": int(bool(union)),
-                "n_candidates": {"sast": len(sast), "taint": len(taint), "auditor": len(auditor)},
-                "auditor": {
-                    "status": hunt_res.get("status"),
-                    "verdict": hunt_res.get("verdict"),
-                    "p_vulnerable": hunt_res.get("p_vulnerable"),
-                    "candidates": [{"line": c["line"], "cwe": c["cwe"], "confidence": c["confidence"]}
-                                   for c in hunt_res.get("candidates") or []],
-                },
-                "taint_spec": {
-                    "status": spec.get("status"),
-                    "n_calls": spec.get("n_calls"),
-                    "sources": (spec.get("sources") or [])[:10],
-                    "sinks": [{"callee": s["callee"], "cwe": s["cwe"]} for s in (spec.get("sinks") or [])][:10],
-                    "sites_checked": len(site_results),
-                    "flows": len(taint),
-                },
-                "context_chars": len(context),
-            })
+        record["context_chars"] = len(context)
+        record["tokens"] = tokens
 
         record.update({
             "status": "ok",
@@ -488,6 +433,13 @@ def run_evaluation(retry_failed: bool = False, limit: int | None = None) -> None
         samples = samples[: limit * 2]
 
     results = state.load_results()
+    foreign = sorted({r.get("pipeline") for r in results.values()
+                      if r.get("pipeline") and r.get("pipeline") != PIPELINE_VERSION})
+    if foreign:
+        raise RuntimeError(
+            f"{state.RESULTS_PATH} already holds pipeline {foreign}, and this code is {PIPELINE_VERSION}. "
+            "Point REALWORLD_RUN at a new directory so the two runs are not mixed."
+        )
     cpg_failed = {sid for sid, r in results.items()
                   if REDO_CPG_FAILED and r.get("status") == "ok" and r.get("cpg_status") == "failed"}
     done = {sid for sid, r in results.items() if r.get("status") == "ok" or not retry_failed} - cpg_failed
@@ -496,7 +448,7 @@ def run_evaluation(retry_failed: bool = False, limit: int | None = None) -> None
         logger.warning(f"Re-running {len(cpg_failed)} samples whose CPG step failed")
     logger.info(f"{len(samples)} samples, {len(samples) - len(todo)} already done, {len(todo)} to go; "
                 f"{WORKERS} workers over {len(ollama_urls())} Ollama and {len(joern_urls()) if USE_CPG else 0} "
-                f"Joern server(s); phase 3 {'on' if PHASE3 else 'off'}")
+                f"Joern server(s); baselines {', '.join(sorted(BASELINES)) or 'off'}")
 
     try:
         state.update_status(phase="sast_prescan", detail=None, done=len(samples) - len(todo), total=len(samples),
@@ -581,9 +533,9 @@ def run_evaluation(retry_failed: bool = False, limit: int | None = None) -> None
                 )
                 logger.info(
                     f"[{len(samples) - left}/{len(samples)}] {record['status']} {record.get('split')} "
-                    f"label={s['label']} sast={record.get('n_findings')} cand={record.get('n_candidates')} "
-                    f"board={record.get('board_pred')} full={record.get('full_pred')} "
-                    f"p={record.get('full_p_vulnerable', record.get('p_vulnerable'))} "
+                    f"label={s['label']} sast={record.get('n_findings')} "
+                    f"board={record.get('board_pred')} llm={record.get('llm_only_pred')} "
+                    f"p={record.get('p_vulnerable')} "
                     f"({record.get('seconds')}s) {s['sample_id']}"
                 )
                 try:

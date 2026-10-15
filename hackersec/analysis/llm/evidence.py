@@ -38,6 +38,11 @@ _CONCESSIONS = {
     "unparseable",
 }
 
+# Default share of the Defender's normalized quote that must appear as one
+# contiguous span in the code under review. This prevents a prose claim that
+# merely mentions a variable name from counting as grounded code citation.
+DEFAULT_MIN_COVERAGE = 0.5
+
 _STRIP_CHARS = re.compile(r"[\s`'\"]+")
 
 
@@ -47,7 +52,9 @@ def _normalize(text: str) -> str:
     return _STRIP_CHARS.sub("", text.lower())
 
 
-def check_sanitizer_evidence(snippet: str | None, evidence: str | None, min_coverage: float = 0.0) -> dict:
+def check_sanitizer_evidence(
+    snippet: str | None, evidence: str | None, min_coverage: float = DEFAULT_MIN_COVERAGE
+) -> dict:
     """
     Verify the Defender's quoted sanitizer against the analyzed snippet.
 

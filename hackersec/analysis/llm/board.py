@@ -1,5 +1,7 @@
 import logging
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from hackersec.analysis.schema import Finding
 from hackersec.analysis.llm.client import (
@@ -48,9 +50,6 @@ TEMP_JUDGE = float(os.getenv("LLM_TEMP_JUDGE", "0.0"))
 
 # Confidence floor applied when the evidence rule overturns a FALSE_POSITIVE.
 OVERRIDE_CONFIDENCE_FLOOR = 0.5
-# The Judge is asked to copy its guard exactly, so most of the quote must be
-# one contiguous span of the code, not just a shared fragment.
-GUARD_MIN_COVERAGE = 0.8
 
 # Function-level review: with more than one vote the Judge is sampled at
 # TEMP_JUDGE_VOTE and the share of VULNERABLE votes is the score
@@ -66,7 +65,7 @@ EVIDENCE_MODE = os.getenv("LLM_EVIDENCE_MODE", "signal").strip().lower()
 # Answer caps for the function-level seats. A capped, unfinished JSON answer
 # is parsed as a failed vote rather than stalling a parallel slot.
 SEAT_MAX_TOKENS = 800
-VOTE_MAX_TOKENS = 700
+VOTE_MAX_TOKENS = 500
 
 
 class AdversarialBoard:
@@ -239,32 +238,44 @@ class AdversarialBoard:
             max(MIN_CODE_CHARS, code_budget(num_ctx) - len(context)),
         )
         prompt_tokens = []
+        usage = {"prompt": 0, "completion": 0, "calls": 0}
+        usage_lock = threading.Lock()
 
         def call(prompt: str, model: str, temperature: float, seed: int = 42, max_tokens: int = SEAT_MAX_TOKENS) -> dict:
             res = self.client.generate(prompt, model=model, temperature=temperature, seed=seed, max_tokens=max_tokens)
-            if res.get("prompt_tokens"):
-                prompt_tokens.append(res["prompt_tokens"])
+            with usage_lock:
+                if res.get("prompt_tokens") is not None:
+                    prompt_tokens.append(res["prompt_tokens"])
+                    usage["prompt"] += int(res["prompt_tokens"] or 0)
+                if res.get("completion_tokens") is not None:
+                    usage["completion"] += int(res["completion_tokens"] or 0)
+                if res.get("llm_status") == "success":
+                    usage["calls"] += 1
             return res
 
-        res = call(
-            build_function_attacker_prompt(function_name, code_text, findings, context),
-            self.model_attacker, TEMP_ATTACKER,
-        )
-        if res["llm_status"] != "success":
-            return self._transport_failure(res)
-        attacker = parse_function_attacker_response(res["response"])
+        # Attacker and Defender submit independent first-round briefs in
+        # parallel: neither side anchors the other, and wall-clock latency
+        # drops by one full generation round.
+        atk_prompt = build_function_attacker_prompt(function_name, code_text, findings, context)
+        def_prompt = build_function_defender_prompt(function_name, code_text, findings, None, context)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            fut_atk = pool.submit(call, atk_prompt, self.model_attacker, TEMP_ATTACKER)
+            fut_def = pool.submit(call, def_prompt, self.model_defender, TEMP_DEFENDER)
+            res_atk = fut_atk.result()
+            res_def = fut_def.result()
 
-        res = call(
-            build_function_defender_prompt(function_name, code_text, findings, attacker, context),
-            self.model_defender, TEMP_DEFENDER,
-        )
-        if res["llm_status"] != "success":
-            return self._transport_failure(res)
-        defender = parse_defender_response(res["response"])
+        if res_atk["llm_status"] != "success":
+            return self._transport_failure(res_atk)
+        if res_def["llm_status"] != "success":
+            return self._transport_failure(res_def)
+        attacker = parse_function_attacker_response(res_atk["response"])
+        defender = parse_defender_response(res_def["response"])
 
         evidence = check_sanitizer_evidence(code, defender.get("sanitization_evidence"))
 
-        judge_prompt = build_function_judge_prompt(function_name, code_text, findings, attacker, defender, context)
+        judge_prompt = build_function_judge_prompt(
+            function_name, code_text, findings, attacker, defender, context, evidence=evidence
+        )
         ballots = []
         vote_temp = TEMP_JUDGE_VOTE if votes > 1 else TEMP_JUDGE
         for i in range(votes):
@@ -283,13 +294,6 @@ class AdversarialBoard:
             # No readable vote: keep the static finding rather than dismiss it.
             vote_share, p_vuln, prediction, verdict_source = None, None, 1, "unparseable_votes"
 
-        # The Judge's quoted guard, checked against the code like the
-        # Defender's sanitizer. A fix usually adds exactly such a check, so
-        # whether it is really present can differ between the two versions
-        # of a function even when the rest of the code is identical.
-        guards = [check_sanitizer_evidence(code, b.get("check_in_code"), GUARD_MIN_COVERAGE) for b in valid]
-        guard_share = sum(g["grounded"] for g in guards) / len(guards) if guards else None
-
         if mode == "override" and prediction == 0 and not evidence["grounded"]:
             prediction, verdict_source = 1, "evidence_rule"
 
@@ -306,9 +310,8 @@ class AdversarialBoard:
             "defender": defender,
             "evidence_check": evidence,
             "evidence_mode": mode,
-            "guard_check": guards[0] if guards else None,
-            "guard_grounded_share": None if guard_share is None else round(guard_share, 4),
             "verdict_source": verdict_source,
+            "tokens": usage,
             "code_truncated": code_truncated,
             "max_prompt_tokens": max_prompt,
             # Ollama keeps only the last num_ctx tokens of an oversized prompt.

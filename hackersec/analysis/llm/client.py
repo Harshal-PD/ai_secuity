@@ -131,6 +131,7 @@ class OllamaClient:
                 # Ollama silently drops the start of a prompt longer than
                 # num_ctx; this lets callers detect that.
                 "prompt_tokens": data.get("prompt_eval_count"),
+                "completion_tokens": data.get("eval_count"),
                 "num_ctx": options["num_ctx"],
             }
 

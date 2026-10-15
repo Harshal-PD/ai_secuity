@@ -38,6 +38,12 @@ SEMGREP_CONFIGS = [
     "p/security-audit",
     "p/owasp-top-ten",
     "p/python",
+    "p/flask",
+    "p/django",
+    "p/sql-injection",
+    "p/xss",
+    "p/command-injection",
+    "p/trailofbits",
     "p/secrets",
 ]
 
@@ -111,7 +117,7 @@ def _semgrep_configs() -> list[str]:
 def rules_signature() -> str:
     """Identifies the exact rule set, so cached scan results are reused only
     while the rules are unchanged."""
-    h = hashlib.sha1()
+    h = hashlib.sha1(b"v6-info-low-bandit-li")
     for cfg in _semgrep_configs():
         p = Path(cfg)
         h.update(p.read_bytes() if p.is_file() else cfg.encode())
@@ -229,7 +235,8 @@ def _semgrep_findings(data: dict, job_id: str) -> list[Finding]:
 # ─── Bandit ─────────────────────────────────────────────────────────────────
 
 def _run_bandit_cmd(targets: list[Path], job_id: str, recursive: bool = False) -> dict | None:
-    cmd = ["bandit"] + (["-r"] if recursive else []) + [str(t) for t in targets] + ["-f", "json", "-l"]  # -l = low + medium + high
+    # -l = severity >= LOW, -i = confidence >= LOW so the gate is recall-heavy
+    cmd = ["bandit"] + (["-r"] if recursive else []) + [str(t) for t in targets] + ["-f", "json", "-l", "-i"]
     timeout = 60 + 5 * max(0, len(targets) - 1)
 
     logger.info(f"[{job_id}] Running Bandit on {len(targets)} target(s)")

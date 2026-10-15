@@ -1,10 +1,14 @@
 import json
+import re
 from pathlib import Path
 from typing import List, Dict
 
 import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
+
+_CWE_ID = re.compile(r"CWE-\d+", re.I)
+_OWASP_ID = re.compile(r"A\d{2}:\d{4}", re.I)
 
 
 class LocalRAGStore:
@@ -71,3 +75,52 @@ class LocalRAGStore:
                     "distance": float(dist)
                 })
         return results
+
+    def retrieve_for_finding(
+        self,
+        rule_id: str,
+        cwe_ids: List[str] | None = None,
+        owasp: str | None = None,
+        message: str = "",
+        top_k: int = 2,
+    ) -> List[Dict]:
+        """Exact CWE/OWASP metadata lookup first, then semantic search with the finding message."""
+        wanted: List[str] = []
+        for raw in cwe_ids or []:
+            for m in _CWE_ID.findall(str(raw)):
+                cid = m.upper()
+                if cid not in wanted:
+                    wanted.append(cid)
+        if owasp:
+            for m in _OWASP_ID.findall(str(owasp)):
+                oid = m.upper()
+                if oid not in wanted:
+                    wanted.append(oid)
+
+        matched: List[Dict] = []
+        seen_ids: set[str] = set()
+        for target_id in wanted:
+            if len(matched) >= top_k:
+                break
+            candidates = [d for d in self.metadata if str(d.get("id", "")).upper() == target_id]
+            if not candidates:
+                continue
+            # Prefer a doc whose text begins with its own ID (avoids mislabelled duplicates).
+            chosen = next((d for d in candidates if str(d.get("text", "")).upper().startswith(target_id)), candidates[0])
+            seen_ids.add(target_id)
+            matched.append({"id": chosen.get("id"), "text": chosen.get("text"), "distance": 0.0})
+
+        if len(matched) < top_k and self.index.ntotal > 0:
+            parts = [f"Security vulnerability {rule_id}"]
+            if wanted:
+                parts.append(" ".join(wanted))
+            if message:
+                parts.append(str(message)[:200])
+            for doc in self.search(" ".join(parts), top_k=top_k + len(matched)):
+                doc_id = str(doc.get("id") or "")
+                if doc_id not in seen_ids:
+                    seen_ids.add(doc_id)
+                    matched.append(doc)
+                    if len(matched) >= top_k:
+                        break
+        return matched

@@ -17,6 +17,7 @@ import time
 from collections import Counter, defaultdict
 from pathlib import Path
 
+from hackersec.analysis.static import SEMGREP_CONFIGS as SEMGREP_PACKS
 from hackersec.evaluation.realworld import state
 from hackersec.evaluation.realworld.functions import extract_pairs, skip_reason
 from hackersec.evaluation.realworld.gitfetch import GitFetcher, Unavailable, _slug
@@ -24,8 +25,6 @@ from hackersec.evaluation.realworld.net import with_network_retry
 from hackersec.evaluation.realworld.sources import LOADERS, _download, _net_guard, local_file_pair
 
 logger = logging.getLogger(__name__)
-
-SEMGREP_PACKS = ["p/security-audit", "p/owasp-top-ten", "p/python", "p/secrets"]
 
 # A fix commit that edits many functions is usually a refactor bundled with
 # the fix; labeling all of them vulnerable would flood the set with noise.

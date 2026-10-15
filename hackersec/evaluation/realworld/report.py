@@ -10,8 +10,8 @@ never see a test label. For each split and dataset:
                 acts, and where removing false positives while keeping true
                 positives is measured
   candidates_flagged
-                the same for functions any candidate source flagged (SAST,
-                LLM-spec taint, LLM auditor) — where the candidates board acts
+                older runs only: functions any candidate source flagged
+                (SAST, LLM-spec taint, LLM auditor)
   pairwise      PrimeVul-style (Ding et al., ICSE 2025) scoring on each
                 vulnerable/fixed pair: P-C correct, P-V both flagged,
                 P-B both cleared, P-R reversed
@@ -44,11 +44,17 @@ PREVALENCES = tuple(float(x) for x in os.getenv("REALWORLD_PREVALENCE", "0.05,0.
 
 SYSTEM_LABELS = {
     "flag_all": "Flag every function (trivial reference)",
-    "sast": "Semgrep + Bandit (baseline)",
-    "board": "SAST board: Judge majority vote",
+    "sast": "Semgrep + Bandit",
+    "semgrep": "Semgrep alone",
+    "bandit": "Bandit alone",
+    "board": "SAST board: Judge vote",
     "board_override": "SAST board + evidence override (ablation)",
     "board_calibrated": "SAST board: vote score, dev-tuned threshold",
     "fusion": "SAST board + fusion (trained on dev)",
+    "llm_only": "LLM only, whole function, no SAST",
+    "llm_only_calibrated": "LLM only, dev-tuned threshold",
+    "llm_context": "LLM only + same-file context, no SAST",
+    "llm_context_calibrated": "LLM only + context, dev-tuned threshold",
     "hunter_raw": "LLM auditor alone (no critic)",
     "taint_raw": "LLM-spec taint alone (no critic)",
     "union_raw": "Any candidate: SAST, taint or auditor (no critic)",
@@ -63,10 +69,16 @@ SYSTEM_LABELS = {
 SYSTEM_KEYS = {
     "flag_all": ("flag_all_pred", None),
     "sast": ("sast_pred", "sast_score"),
+    "semgrep": ("semgrep_pred", None),
+    "bandit": ("bandit_pred", None),
     "board": ("board_pred", "vote_score"),
     "board_override": ("board_override_pred", None),
     "board_calibrated": ("board_calibrated_pred", "p_score"),
     "fusion": ("fusion_pred", "fusion_score"),
+    "llm_only": ("llm_only_pred", "llm_only_p"),
+    "llm_only_calibrated": ("llm_only_calibrated_pred", "llm_only_p"),
+    "llm_context": ("llm_context_pred", "llm_context_p"),
+    "llm_context_calibrated": ("llm_context_calibrated_pred", "llm_context_p"),
     "hunter_raw": ("hunter_pred", "hunter_score"),
     "taint_raw": ("taint_pred", None),
     "union_raw": ("union_pred", None),
@@ -77,9 +89,21 @@ SYSTEM_KEYS = {
     "full_guard": ("full_guard_pred", None),
     "fusion_v1": ("fusion_v1_pred", None),
 }
-HEADLINE_ORDER = ("full_fusion", "full_calibrated", "full_board", "fusion", "board_calibrated", "board")
+HEADLINE_ORDER = ("board_calibrated", "fusion", "board", "full_fusion", "full_calibrated", "full_board")
 # Columns of the family table, which would be unreadable with every system.
-FAMILY_SYSTEMS = ("sast", "board_calibrated", "hunter_raw", "union_raw", "full_board", "full_fusion")
+FAMILY_SYSTEMS = ("sast", "semgrep", "bandit", "board_calibrated", "llm_only_calibrated", "llm_context_calibrated")
+# LLM calls that produce each system's verdict. Calibrated rows share the calls.
+COST_BUCKET = {
+    "board": "board", "board_override": "board", "board_calibrated": "board", "fusion": "board",
+    "llm_only": "llm_only", "llm_only_calibrated": "llm_only",
+    "llm_context": "llm_context", "llm_context_calibrated": "llm_context",
+}
+COST_LABELS = {
+    "sast": "Semgrep + Bandit (no LLM)",
+    "board": "SAST board (LLM only where static analysis flagged)",
+    "llm_only": "LLM only, whole function, no SAST",
+    "llm_context": "LLM only + same-file context, no SAST",
+}
 
 
 # ── Preparing records ───────────────────────────────────────────────────────
@@ -164,6 +188,17 @@ def _calibrate(rows: list[dict]) -> dict:
             for r in rows:
                 r["full_fusion_score"] = model.score(r)
                 r["full_fusion_pred"] = model.predict(r)
+
+    for score_key, pred_key, name in (
+        ("llm_only_p", "llm_only_calibrated_pred", "llm_only_threshold"),
+        ("llm_context_p", "llm_context_calibrated_pred", "llm_context_threshold"),
+    ):
+        if rows and all(score_key in r for r in rows):
+            t = fusion.best_threshold([r[score_key] for r in dev], labels) if dev else None
+            out[name] = t
+            if t is not None:
+                for r in rows:
+                    r[pred_key] = int(r[score_key] is not None and r[score_key] >= t)
     return out
 
 
@@ -242,7 +277,7 @@ def _pairwise(rows: list[dict], key: str) -> dict:
         "differ_rate": round(differ / n, 4) if n else 0.0,
         "right_way_round": round(counts["P-C"] / differ, 4) if differ else None,
         # H0 "no signal": P-C and P-R are equally likely among differing pairs.
-        "sign_test_p": round(_binom_p(counts["P-C"], counts["P-R"]), 6),
+        "sign_test_p": _binom_p(counts["P-C"], counts["P-R"]),
     }
 
 
@@ -266,7 +301,7 @@ def _pairwise_scores(rows: list[dict], score_key: str) -> dict | None:
     return {
         "pairs": n, "higher": wins, "lower": losses, "tied": ties,
         "auc": round((wins + 0.5 * ties) / n, 4),
-        "sign_test_p": round(_binom_p(wins, losses), 6),
+        "sign_test_p": _binom_p(wins, losses),
     }
 
 
@@ -292,7 +327,7 @@ def _mcnemar(rows: list[dict], key: str, baseline_key: str) -> dict:
     """Exact two-sided McNemar test on per-function correctness."""
     b = sum(1 for r in rows if r[key] == r["label"] and r[baseline_key] != r["label"])
     c = sum(1 for r in rows if r[key] != r["label"] and r[baseline_key] == r["label"])
-    return {"system_only_correct": b, "baseline_only_correct": c, "p_value": round(_binom_p(b, c), 4)}
+    return {"system_only_correct": b, "baseline_only_correct": c, "p_value": _binom_p(b, c)}
 
 
 def _ci(values: np.ndarray) -> list[float]:
@@ -433,6 +468,15 @@ def _telemetry(rows: list[dict]) -> dict:
         full = [r for r in candidates if r.get("full_board")]
         if full:
             out["candidates_board"] = _board_telemetry(full, "full_board", "full_pred", "full_override_pred")
+
+    baselines = {}
+    for key in ("llm_only", "llm_context"):
+        reviewed = [r for r in rows if isinstance(r.get(key), dict)]
+        if reviewed:
+            baselines[f"{key}_parse_failed_rate"] = _rate(reviewed, lambda r, key=key: r[key].get("status") != "success")
+            baselines[f"{key}_vulnerable_rate"] = _rate(reviewed, lambda r, key=key: r.get(f"{key}_pred") == 1)
+    if baselines:
+        out["llm_baselines"] = baselines
     return out
 
 
@@ -491,6 +535,39 @@ def _per_family(rows: list[dict], systems: list[str]) -> dict:
     }
 
 
+def _cost(rows: list[dict]) -> dict | None:
+    """Token totals for each LLM call kind. Means divide by every function,
+    including ones the SAST board never called the model for."""
+    if not rows or not any(isinstance(r.get("tokens"), dict) for r in rows):
+        return None
+    out = {}
+    n = len(rows)
+    for bucket in ("board", "llm_only", "llm_context"):
+        prompt = completion = calls = used = 0
+        seen = False
+        for r in rows:
+            part = (r.get("tokens") or {}).get(bucket)
+            if not isinstance(part, dict):
+                continue
+            seen = True
+            prompt += int(part.get("prompt") or 0)
+            completion += int(part.get("completion") or 0)
+            c = int(part.get("calls") or 0)
+            calls += c
+            used += int(c > 0)
+        if seen:
+            total = prompt + completion
+            out[bucket] = {
+                "prompt_tokens": prompt,
+                "completion_tokens": completion,
+                "total_tokens": total,
+                "calls": calls,
+                "functions_with_calls": used,
+                "mean_tokens": round(total / n, 1) if n else None,
+            }
+    return out or None
+
+
 def _view(rows: list[dict], systems: list[str], stats: bool) -> dict:
     by_cwe = defaultdict(list)
     for r in rows:
@@ -509,6 +586,7 @@ def _view(rows: list[dict], systems: list[str], stats: bool) -> dict:
             for s in systems if SYSTEM_KEYS[s][1]
         },
         "telemetry": _telemetry(rows),
+        "cost": _cost(rows),
         "per_family": _per_family(rows, systems),
         "per_cwe": {
             cwe: {"samples": len(rs), "flagged": sum(1 for r in rs if r["flagged"]),
@@ -582,13 +660,44 @@ def _md_signal(v: dict, systems: list[str]) -> list[str]:
     return L
 
 
+def _md_cost(v: dict) -> list[str]:
+    cost = v.get("cost")
+    if not cost:
+        return []
+    e2e = v["end_to_end"]
+    prefer = {"board": "board_calibrated", "llm_only": "llm_only_calibrated", "llm_context": "llm_context_calibrated"}
+    fallback = {"board": "board", "llm_only": "llm_only", "llm_context": "llm_context"}
+    L = ["", "**Tokens per detection** (prompt + completion). The mean is over every function, so the SAST "
+         "board costs nothing on functions static analysis did not flag. Tokens per true positive uses the "
+         "dev-tuned threshold when that row exists.", "",
+         "| System | Functions sent to the LLM | Mean tokens / function | True positives | Tokens per true positive |",
+         "|---|---|---|---|---|"]
+
+    def line(label: str, calls: int, mean: float, tp: int, total: int) -> str:
+        per = "—" if not tp else f"{total / tp:,.0f}"
+        return f"| {label} | {calls} | {mean:,.1f} | {tp} | {per} |"
+
+    if "sast" in e2e:
+        L.append(line(COST_LABELS["sast"], 0, 0.0, e2e["sast"]["tp"], 0))
+    for bucket, part in cost.items():
+        sys = prefer[bucket] if prefer[bucket] in e2e else fallback[bucket]
+        if sys not in e2e:
+            continue
+        L.append(line(COST_LABELS[bucket], part["functions_with_calls"], part["mean_tokens"],
+                      e2e[sys]["tp"], part["total_tokens"]))
+    L.append("")
+    return L
+
+
 def _md_view(name: str, v: dict, systems: list[str]) -> list[str]:
     sig = v.get("significance") or {}
     boot, mcn = sig.get("bootstrap") or {}, sig.get("mcnemar_vs_sast") or {}
     L = [f"### {name} — {v['samples']} functions, {v['pairs']} pairs", ""]
     L += _md_signal(v, systems) + [""]
-    L += ["**End-to-end** (every function; SAST-board recall is capped by SAST, candidates-board recall "
-         "by the any-candidate row)", "",
+    cap = "SAST-board recall cannot exceed Semgrep + Bandit"
+    if "full_board" in systems:
+        cap += "; candidates-board recall cannot exceed the any-candidate row"
+    L += [f"**End-to-end** (every function; {cap})", "",
          "| System | Precision | Recall | FPR | Accuracy | MCC [95% CI] | ΔMCC vs SAST [95% CI] | F1 [95% CI] "
          "| McNemar p (accuracy, uncorrected) |",
          "|---|---|---|---|---|---|---|---|---|"]
@@ -598,8 +707,9 @@ def _md_view(name: str, v: dict, systems: list[str]) -> list[str]:
         L.append(
             f"| {SYSTEM_LABELS[s]} | {m['precision']:.3f} | {m['recall']:.3f} | {m['fpr']:.3f} | {m['accuracy']:.3f} "
             f"| {m['mcc']:.3f}{_fmt_ci(b.get('mcc_ci'))} | {_fmt_ci(b.get('delta_mcc_vs_sast_ci')).strip() or '—'} "
-            f"| {m['f1']:.3f}{_fmt_ci(b.get('f1_ci'))} | {'—' if p is None else f'{p:.4f}'} |"
+            f"| {m['f1']:.3f}{_fmt_ci(b.get('f1_ci'))} | {_fmt_p(p)} |"
         )
+    L += _md_cost(v)
 
     subsets = [("static analysis flagged", v["sast_flagged"])]
     if v.get("candidates_flagged"):
@@ -698,6 +808,11 @@ def _markdown(report: dict) -> str:
                  f"(max {objective} on dev)")
     if cal.get("full_fusion"):
         L.append(f"- Candidates fusion: {cal['full_fusion']}{fusion_extra(cal.get('full_fusion_model') or {})}")
+    if cal.get("llm_only_threshold") is not None:
+        L.append(f"- LLM-only threshold on P(vulnerable): **{cal['llm_only_threshold']:.3f}** (max {objective} on dev)")
+    if cal.get("llm_context_threshold") is not None:
+        L.append(f"- LLM-only + context threshold on P(vulnerable): **{cal['llm_context_threshold']:.3f}** "
+                 f"(max {objective} on dev)")
     L += ["", "Each pair contributes one vulnerable and one fixed function, so flagging every function scores "
           "F1 0.667, accuracy 0.5 and MCC 0 (the trivial reference row). MCC, accuracy and the pairwise "
           "columns show whether a system actually separates vulnerable from fixed code.", ""]
@@ -810,14 +925,13 @@ def build_report(write: bool = True) -> dict:
             "commit is vulnerable before the fix and fixed after it. Tangled commits "
             "(> REALWORLD_MAX_FUNCS_PER_COMMIT functions) are excluded; the clean subset further keeps only "
             "commits that changed a single function.",
-            "The SAST board only reasons about Semgrep/Bandit findings, so its recall cannot exceed theirs. The "
-            "candidates board also sees LLM-spec taint flows (IRIS-style: the LLM labels the function's calls as "
-            "sources/sinks and Joern checks the flows) and LLM auditor candidates (GPTLens-style), so its ceiling is "
-            "the 'any candidate' recall. The *_flagged views isolate what each board adds over its candidates.",
-            "The auditor and the spec labelling see only the code and same-file callers/callees, never the "
-            "dataset's label or CWE. Context is limited to the same file; cross-file callers are not shown.",
-            "The auditor-alone and taint-alone rows have no critic; they measure how much each candidate source "
-            "finds, and how noisy it is, before the board filters it.",
+            "The SAST board only reasons about Semgrep and Bandit findings, so its recall cannot exceed theirs. "
+            "The sast_flagged view isolates what the board adds on the functions it is asked to review.",
+            "The LLM-only rows ask the same model once, with no static findings: the function alone, and the "
+            "function plus same-file callers and callees. They are comparison baselines, not part of the shipped "
+            "pipeline. They never see the dataset label or CWE. Context is limited to the same file.",
+            "Token counts are Ollama's prompt_eval_count plus eval_count. Tokens per true positive divides the "
+            "tokens spent on that system by the true positives of its dev-tuned threshold.",
             "Board thresholds and fusion models are fitted on the dev split only (maximising "
             f"{fusion.CALIBRATION_METRIC}); test repositories never appear in dev. Dev numbers are in-sample and "
             "are shown for reference.",
@@ -832,6 +946,16 @@ def build_report(write: bool = True) -> dict:
             "share of functions were vulnerable, instead of the 50% this test set has by construction.",
         ],
     }
+    has_phase3 = any(r.get("full_pred") is not None for r in rows)
+    has_baselines = any(r.get("llm_only_pred") is not None for r in rows)
+    if not has_baselines:
+        report["caveats"] = [c for c in report["caveats"] if not c.startswith("The LLM-only") and not c.startswith("Token counts")]
+    if has_phase3:
+        report["caveats"].insert(
+            2,
+            "This run also has the older candidates board (LLM-spec taint and an LLM auditor). Its recall cannot "
+            "exceed the any-candidate row. Those rows are kept so an older checkpoint can still be re-scored.",
+        )
     if "vudenc" in datasets:
         report["caveats"].append("VUDENC commits are keyword-mined and noisier than CVE-linked CVEfixes commits; "
                                  "compare within, not across, datasets.")
@@ -848,6 +972,7 @@ def build_report(write: bool = True) -> dict:
             dp.pop("done", None)  # thousands of commit keys; not useful in the report
 
     from hackersec.analysis.llm import board as llm_board
+    from hackersec.analysis.static import SEMGREP_CONFIGS
     from hackersec.evaluation.metrics import collect_provenance
 
     report["provenance"] = collect_provenance({
@@ -865,10 +990,10 @@ def build_report(write: bool = True) -> dict:
         "datasets": sorted(d for d in datasets if d),
         "reposvul_labels": os.getenv("REALWORLD_REPOSVUL_LABELS", "llm") if "reposvul" in datasets else None,
         "bootstrap_unit": "repository",
-        "phase3": os.getenv("REALWORLD_PHASE3", "1"),
+        "baselines": os.getenv("REALWORLD_BASELINES", "function,context"),
+        "semgrep_packs": ",".join(SEMGREP_CONFIGS),
         "workers": os.getenv("REALWORLD_WORKERS", "1"),
         "num_ctx": os.getenv("OLLAMA_NUM_CTX", "4096"),
-        "hunter_min_confidence": os.getenv("LLM_HUNTER_MIN_CONFIDENCE", "0.3"),
         "context_chars": os.getenv("LLM_CONTEXT_CHARS", "1200"),
     })
 

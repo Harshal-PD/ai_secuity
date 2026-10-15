@@ -188,9 +188,6 @@ def parse_vote_response(raw_text: str) -> dict:
         "p_vulnerable": round(p_vuln, 4),
         "finding_ids": _finding_ids(data.get("finding_ids")),
         "reasoning": str(data.get("reasoning", ""))[:600],
-        "dangerous_operation": str(data.get("dangerous_operation") or "")[:300],
-        "required_check": str(data.get("required_check") or "")[:300],
-        "check_in_code": str(data.get("check_in_code") or "")[:400],
     }
 
 

@@ -54,6 +54,7 @@ def build_taint_query(
     sink_name: str | None = None,
     extra_source_regex: str | None = None,
     method_line: int | None = None,
+    sink_end_line: int | None = None,
 ) -> str:
     """
     Find data flows from untrusted sources into the arguments of the call(s)
@@ -97,6 +98,14 @@ def build_taint_query(
     if extra_source_regex:
         inputs = f"({inputs} ++ cpg.call.code({_scala_str(extra_source_regex)}).l).distinct"
 
+    start_l = int(sink_line)
+    end_l = int(max(start_l, sink_end_line or start_l))
+    if end_l > start_l:
+        line_sel = f".filter(_.lineNumber.exists(l => l >= {start_l} && l <= {end_l}))"
+    else:
+        line_sel = f".lineNumber({start_l})"
+    near_sel = f".filter(_.lineNumber.exists(l => l >= {start_l} && l <= {end_l + 2}))"
+
     return f"""locally {{
   def hsEsc(s: String): String = s.flatMap {{
     case '"' => "\\\\\\""
@@ -104,8 +113,9 @@ def build_taint_query(
     case c if c.isControl => " "
     case c => c.toString
   }}
-  val hsInFile = cpg.call.lineNumber({int(sink_line)}){file_filter}.l
-  val hsOnLine = if (hsInFile.nonEmpty) hsInFile else cpg.call.lineNumber({int(sink_line)}).l
+  val hsExact = cpg.call{line_sel}{file_filter}.l
+  val hsInFile = if (hsExact.nonEmpty) hsExact else cpg.call{near_sel}{file_filter}.l
+  val hsOnLine = if (hsInFile.nonEmpty) hsInFile else cpg.call{line_sel}.l
   {named}
   {real}
   val hsSinks = if (hsReal.nonEmpty) hsReal else hsOnLine

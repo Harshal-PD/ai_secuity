@@ -25,15 +25,13 @@ logger = logging.getLogger(__name__)
 
 _BASE = [
     "p_vulnerable",
-    "vote_share",
     "attacker_confidence",
     "defender_safety",
     "evidence_grounded",
-    "guard_grounded",
     "log_findings",
     "max_severity",
     "any_taint",
-    "semgrep_share",
+    "both_tools_flagged",
 ]
 FEATURES = _BASE
 FULL_FEATURES = _BASE + ["has_sast", "has_llm_taint", "has_auditor", "auditor_confidence", "auditor_p_vulnerable"]
@@ -62,24 +60,24 @@ def _num(value, default: float) -> float:
 
 def features(record: dict, kind: str = "board") -> list[float] | None:
     """Feature vector for a record whose `kind` debate ran, else None."""
-    findings_key, board_key, p_key, share_key = _KEYS[kind]
+    findings_key, board_key, p_key, _ = _KEYS[kind]
     findings = record.get(findings_key) or []
     board = record.get(board_key)
     if not findings or not board:
         return None
-    semgrep = sum(1 for f in findings if f.get("tool") == "semgrep")
+    has_semgrep = bool(record.get("semgrep_pred")) or any(f.get("tool") == "semgrep" for f in findings)
+    has_bandit = bool(record.get("bandit_pred")) or any(
+        f.get("tool") == "bandit" or f.get("also_bandit") for f in findings
+    )
     x = [
         _num(record.get(p_key), 0.5),
-        _num(record.get(share_key), 0.5),
         _num(board.get("attacker_confidence"), 0.5),
         _num(board.get("defender_safety"), 0.5),
         1.0 if board.get("evidence_grounded") else 0.0,
-        # Share of Judge votes whose quoted guard is in the code; 0 before v5.
-        _num(board.get("guard_grounded_share"), 0.0),
         math.log1p(len(findings)),
         max(_SEVERITY.get(f.get("severity"), 0.0) for f in findings),
         1.0 if any((f.get("taint_paths") or 0) > 0 for f in findings) else 0.0,
-        semgrep / len(findings),
+        1.0 if (has_semgrep and has_bandit) else 0.0,
     ]
     if kind == "full":
         n = record.get("n_candidates") or {}
@@ -187,25 +185,48 @@ def train(dev_records: list[dict], kind: str = "board") -> tuple[Fusion | None, 
     if minority < 2:
         return None, "flagged dev functions are all one class"
 
-    def pipeline():
-        return make_pipeline(StandardScaler(), LogisticRegression(class_weight="balanced", C=1.0, max_iter=1000))
+    def pipeline(c_val: float):
+        return make_pipeline(StandardScaler(), LogisticRegression(class_weight="balanced", C=c_val, max_iter=1000))
 
     folds = min(5, minority)
-    cv_scores = cross_val_predict(
-        pipeline(), X, y, cv=StratifiedKFold(folds, shuffle=True, random_state=0), method="predict_proba"
-    )[:, 1]
-
-    # Unflagged dev functions keep a None score, so the threshold trades off
-    # the board's dismissals against the misses the candidates already have.
-    it = iter(cv_scores.tolist())
-    all_scores = [next(it) if x is not None else None for x, _ in rows]
+    cv = StratifiedKFold(folds, shuffle=True, random_state=0)
     all_labels = [y for _, y in rows]
-    threshold = best_threshold(all_scores, all_labels)
 
-    model = pipeline().fit(X, y)
+    def eval_scores(flagged_scores: list[float]) -> tuple[float, float | None, list[float | None]]:
+        it = iter(flagged_scores)
+        full = [next(it) if x is not None else None for x, _ in rows]
+        t = best_threshold(full, all_labels)
+        if t is None:
+            return -math.inf, None, full
+        tp = sum(1 for s, yy in zip(full, all_labels) if s is not None and s >= t and yy)
+        fp = sum(1 for s, yy in zip(full, all_labels) if s is not None and s >= t and not yy)
+        fn = sum(all_labels) - tp
+        tn = len(all_labels) - tp - fp - fn
+        return metric(tp, fp, fn, tn), t, full
+
+    best_c, best_val, threshold, all_scores = 0.15, -math.inf, None, []
+    for c_val in (0.05, 0.15, 0.4, 1.0):
+        cv_probs = cross_val_predict(pipeline(c_val), X, y, cv=cv, method="predict_proba")[:, 1].tolist()
+        val, t, full = eval_scores(cv_probs)
+        if val > best_val + 1e-12:
+            best_c, best_val, threshold, all_scores = c_val, val, t, full
+
+    model = pipeline(best_c).fit(X, y)
     scaler, lr = model[0], model[1]
+    coef, intercept = lr.coef_[0].copy(), float(lr.intercept_[0])
+
+    # Guard against small-sample overfitting: if out-of-fold CV on dev is
+    # worse than raw p_vulnerable alone, fall back to the p_vulnerable axis.
+    p_only_probs = [float(1.0 / (1.0 + math.exp(-((x[0] - scaler.mean_[0]) / scaler.scale_[0])))) for x, _ in flagged]
+    p_val, p_t, p_full = eval_scores(p_only_probs)
+    if p_val > best_val + 1e-12:
+        coef = np.zeros_like(coef)
+        coef[0] = 1.0
+        intercept = 0.0
+        threshold, all_scores = p_t, p_full
+
     # StandardScaler gives constant features scale 1, so score() never divides by 0.
-    fusion = Fusion(scaler.mean_, scaler.scale_, lr.coef_[0], lr.intercept_[0], threshold, len(flagged), kind=kind)
+    fusion = Fusion(scaler.mean_, scaler.scale_, coef, intercept, threshold, len(flagged), kind=kind)
     tp = sum(1 for s, yy in zip(all_scores, all_labels) if s is not None and threshold is not None and s >= threshold and yy)
     fp = sum(1 for s, yy in zip(all_scores, all_labels) if s is not None and threshold is not None and s >= threshold and not yy)
     fn = sum(all_labels) - tp
@@ -213,7 +234,7 @@ def train(dev_records: list[dict], kind: str = "board") -> tuple[Fusion | None, 
     fusion.dev_cv_f1 = round(metric(tp, fp, fn, tn, "f1"), 4)
     fusion.dev_cv_mcc = round(metric(tp, fp, fn, tn, "mcc"), 4)
     return fusion, (f"trained on {len(flagged)} flagged dev functions "
-                    f"({folds}-fold CV threshold, max {CALIBRATION_METRIC})")
+                    f"({folds}-fold CV C={best_c}, max {CALIBRATION_METRIC})")
 
 
 def load(data: dict | None) -> Fusion | None:

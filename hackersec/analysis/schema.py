@@ -28,7 +28,7 @@ class Finding:
 SEMGREP_SEVERITY_MAP = {
     "ERROR": "critical",
     "WARNING": "high",
-    "INFO": None,      # Filtered — never stored
+    "INFO": "low",     # Kept as low so the SAST gate maximises recall
 }
 
 BANDIT_SEVERITY_MAP = {

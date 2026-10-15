@@ -1,3 +1,4 @@
+from dataclasses import replace
 from hackersec.analysis.schema import Finding, SEVERITY_RANK
 
 
@@ -17,6 +18,23 @@ def _severity_rank(severity: str) -> int:
     return SEVERITY_RANK.get(severity, 0)
 
 
+def _merge_pair(winner: Finding, other: Finding) -> Finding:
+    """Combine metadata and note cross-tool agreement when two findings collide."""
+    cwes = list(dict.fromkeys((winner.cwe_ids or []) + (other.cwe_ids or [])))
+    owasp = winner.owasp_category or other.owasp_category
+    line_end = max(winner.line_end or winner.line_start, other.line_end or other.line_start)
+    msg = winner.message or ""
+    tag = f"[also flagged by {other.tool}"
+    if other.tool != winner.tool and tag not in msg:
+        msg = f"{msg} [also flagged by {other.tool} {other.rule_id}: {other.message}]".strip()
+    return replace(winner, line_end=line_end, message=msg, cwe_ids=cwes, owasp_category=owasp)
+
+
+def has_tool(finding: Finding, tool: str) -> bool:
+    """True if `finding` came from `tool` or absorbed a finding from `tool`."""
+    return finding.tool == tool or f"[also flagged by {tool} " in (finding.message or "")
+
+
 def dedup_findings(findings: list[Finding]) -> list[Finding]:
     """
     Deduplicate findings by (file_path, line_start, cwe_category).
@@ -24,6 +42,7 @@ def dedup_findings(findings: list[Finding]) -> list[Finding]:
     When two findings map to the same key:
     - Keep the one with higher severity
     - Prefer the Semgrep finding for richer metadata (CWE, OWASP)
+    - Preserve cross-tool agreement in the merged finding's message and CWEs
     
     Also filters out any remaining INFO-equivalent findings (severity=None or unknown).
     """
@@ -39,11 +58,11 @@ def dedup_findings(findings: list[Finding]) -> list[Finding]:
             existing = seen[key]
             # Keep higher severity; on tie, prefer Semgrep (richer metadata)
             if _severity_rank(f.severity) > _severity_rank(existing.severity):
-                seen[key] = f
-            elif _severity_rank(f.severity) == _severity_rank(existing.severity):
-                if f.tool == "semgrep" and existing.tool != "semgrep":
-                    # Semgrep has CWE + OWASP mapping — prefer it
-                    seen[key] = f
+                seen[key] = _merge_pair(f, existing)
+            elif _severity_rank(f.severity) == _severity_rank(existing.severity) and f.tool == "semgrep" and existing.tool != "semgrep":
+                seen[key] = _merge_pair(f, existing)
+            else:
+                seen[key] = _merge_pair(existing, f)
 
     return list(seen.values())
 

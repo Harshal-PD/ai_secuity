@@ -197,12 +197,12 @@ services:
       # One dataset directory per dataset choice: samples.jsonl is appended
       # to, so ReposVul must not share CVEfixes/VUDENC's directory. Old runs
       # are re-scored with REALWORLD_DATA=realworld.
-      - REALWORLD_DIR=/app/workspace/${REALWORLD_DATA:-realworld_reposvul}
+      - REALWORLD_DIR=/app/workspace/${REALWORLD_DATA:-realworld_python}
       # One directory per run, so a new pipeline version never mixes with
       # (or resumes from) an older run's checkpoints.
-      - REALWORLD_RESULTS_DIR=/app/eval_results/${REALWORLD_RUN:-reposvul_v5}
-      - SEMGREP_RULES_DIR=/app/workspace/${REALWORLD_DATA:-realworld_reposvul}/semgrep_rules
-      - REALWORLD_DATASETS=${REALWORLD_DATASETS:-reposvul}
+      - REALWORLD_RESULTS_DIR=/app/eval_results/${REALWORLD_RUN:-python_v6}
+      - SEMGREP_RULES_DIR=/app/workspace/${REALWORLD_DATA:-realworld_python}/semgrep_rules
+      - REALWORLD_DATASETS=${REALWORLD_DATASETS:-cvefixes,vudenc,reposvul}
       - REALWORLD_TARGET_REPOSVUL=${REALWORLD_TARGET_REPOSVUL:-1000}
       # llm (default) | strict | all — see hackersec/evaluation/realworld/sources.py
       - REALWORLD_REPOSVUL_LABELS=${REALWORLD_REPOSVUL_LABELS:-llm}
@@ -214,8 +214,10 @@ services:
       - OLLAMA_BASE_URLS=${OLLAMA_BASE_URLS:-http://ollama:11434}
       - JOERN_BASE_URLS=${JOERN_BASE_URLS:-http://joern:8080}
       - REALWORLD_WORKERS=${REALWORLD_WORKERS:-1}
-      # 1 = also run the LLM auditor, LLM-spec taint and the candidates board.
-      - REALWORLD_PHASE3=${REALWORLD_PHASE3:-1}
+      # Comparison baselines, not part of the shipped SAST board.
+      # function = whole function, no findings; context = plus same-file callers.
+      # 0 disables both.
+      - REALWORLD_BASELINES=${REALWORLD_BASELINES:-function,context}
     depends_on:
       ollama:
         condition: service_started
