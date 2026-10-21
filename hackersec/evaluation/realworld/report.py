@@ -44,13 +44,16 @@ PREVALENCES = tuple(float(x) for x in os.getenv("REALWORLD_PREVALENCE", "0.05,0.
 
 SYSTEM_LABELS = {
     "flag_all": "Flag every function (trivial reference)",
-    "sast": "Semgrep + Bandit",
+    "sast": "Semgrep + Bandit + AST Gate",
     "semgrep": "Semgrep alone",
     "bandit": "Bandit alone",
+    "ast_sink": "AST sink gate alone",
+    "codeql": "CodeQL alone",
     "board": "SAST board: Judge vote",
     "board_override": "SAST board + evidence override (ablation)",
     "board_calibrated": "SAST board: vote score, dev-tuned threshold",
     "fusion": "SAST board + fusion (trained on dev)",
+    "cascade": "SAST board + fusion + context cascade (trained on dev)",
     "llm_only": "LLM only, whole function, no SAST",
     "llm_only_calibrated": "LLM only, dev-tuned threshold",
     "llm_context": "LLM only + same-file context, no SAST",
@@ -71,10 +74,13 @@ SYSTEM_KEYS = {
     "sast": ("sast_pred", "sast_score"),
     "semgrep": ("semgrep_pred", None),
     "bandit": ("bandit_pred", None),
+    "ast_sink": ("ast_pred", None),
+    "codeql": ("codeql_pred", None),
     "board": ("board_pred", "vote_score"),
     "board_override": ("board_override_pred", None),
     "board_calibrated": ("board_calibrated_pred", "p_score"),
     "fusion": ("fusion_pred", "fusion_score"),
+    "cascade": ("cascade_pred", "cascade_score"),
     "llm_only": ("llm_only_pred", "llm_only_p"),
     "llm_only_calibrated": ("llm_only_calibrated_pred", "llm_only_p"),
     "llm_context": ("llm_context_pred", "llm_context_p"),
@@ -89,9 +95,9 @@ SYSTEM_KEYS = {
     "full_guard": ("full_guard_pred", None),
     "fusion_v1": ("fusion_v1_pred", None),
 }
-HEADLINE_ORDER = ("board_calibrated", "fusion", "board", "full_fusion", "full_calibrated", "full_board")
+HEADLINE_ORDER = ("fusion", "cascade", "board_calibrated", "board", "full_fusion", "full_calibrated", "full_board")
 # Columns of the family table, which would be unreadable with every system.
-FAMILY_SYSTEMS = ("sast", "semgrep", "bandit", "board_calibrated", "llm_only_calibrated", "llm_context_calibrated")
+FAMILY_SYSTEMS = ("sast", "semgrep", "bandit", "board_calibrated", "fusion", "cascade", "llm_only_calibrated", "llm_context_calibrated")
 # LLM calls that produce each system's verdict. Calibrated rows share the calls.
 COST_BUCKET = {
     "board": "board", "board_override": "board", "board_calibrated": "board", "fusion": "board",
@@ -99,7 +105,7 @@ COST_BUCKET = {
     "llm_context": "llm_context", "llm_context_calibrated": "llm_context",
 }
 COST_LABELS = {
-    "sast": "Semgrep + Bandit (no LLM)",
+    "sast": "Static Gate (no LLM)",
     "board": "SAST board (LLM only where static analysis flagged)",
     "llm_only": "LLM only, whole function, no SAST",
     "llm_context": "LLM only + same-file context, no SAST",
@@ -199,11 +205,50 @@ def _calibrate(rows: list[dict]) -> dict:
             if t is not None:
                 for r in rows:
                     r[pred_key] = int(r[score_key] is not None and r[score_key] >= t)
+
+    # Two-stage cascade: SAST-flagged functions use the dev-fitted Fusion
+    # model; SAST-unflagged functions open a high-confidence secondary screen
+    # on `llm_context_p` tuned on dev to maximise CALIBRATION_METRIC.
+    if model is not None and rows and all("llm_context_p" in r for r in rows) and dev:
+        unflagged_cands = sorted(
+            {float(r["llm_context_p"]) for r in dev if not r["flagged"] and r.get("llm_context_p") is not None and float(r["llm_context_p"]) >= 0.85},
+            reverse=True,
+        )
+        best_t, best_val = None, -math.inf
+        for t_unf in unflagged_cands:
+            preds = [
+                r["fusion_pred"] if r["flagged"] else int(r.get("llm_context_p") is not None and float(r["llm_context_p"]) >= t_unf)
+                for r in dev
+            ]
+            tp = sum(1 for p, y in zip(preds, labels) if p == 1 and y == 1)
+            fp = sum(1 for p, y in zip(preds, labels) if p == 1 and y == 0)
+            fn = sum(1 for p, y in zip(preds, labels) if p == 0 and y == 1)
+            tn = sum(1 for p, y in zip(preds, labels) if p == 0 and y == 0)
+            val = fusion.metric(tp, fp, fn, tn)
+            if val > best_val + 1e-12:
+                best_val, best_t = val, t_unf
+        if best_t is not None:
+            out["cascade_unflagged_threshold"] = best_t
+            for r in rows:
+                ctx_p = float(r["llm_context_p"]) if r.get("llm_context_p") is not None else 0.0
+                if r["flagged"] and r.get("fusion_score") is not None:
+                    r["cascade_score"] = round(0.5 + 0.5 * float(r["fusion_score"]), 4)
+                    r["cascade_pred"] = int(r["fusion_pred"])
+                else:
+                    r["cascade_score"] = round(0.5 * ctx_p, 4)
+                    r["cascade_pred"] = int(ctx_p >= best_t)
     return out
 
 
 def _systems(rows: list[dict]) -> list[str]:
-    return [s for s, (key, _) in SYSTEM_KEYS.items() if rows and all(r.get(key) is not None for r in rows)]
+    active = []
+    for s, (key, _) in SYSTEM_KEYS.items():
+        if not rows or not all(r.get(key) is not None for r in rows):
+            continue
+        if s == "codeql" and not any(r.get(key) for r in rows):
+            continue
+        active.append(s)
+    return active
 
 
 # ── Metrics ─────────────────────────────────────────────────────────────────
@@ -254,7 +299,7 @@ def _holm(pvals: dict) -> dict:
     out, running = {}, 0.0
     for i, (p, k) in enumerate(items):
         running = max(running, min(1.0, (len(items) - i) * p))
-        out[k] = round(running, 4)
+        out[k] = running
     return out
 
 
@@ -424,6 +469,10 @@ def _telemetry(rows: list[dict]) -> dict:
         "by_tool": {t: sum(1 for f in fs if f.get("tool") == t) for t in sorted({f.get("tool") for f in fs})},
         "cpg_success_rate": _rate(fs, lambda f: f.get("cpg_status") in ("success", "no_flow_found")),
         "cpg_taint_found_rate": _rate(fs, lambda f: (f.get("taint_paths") or 0) > 0),
+        "cpg_unfiltered_taint_rate": _rate(fs, lambda f: (f.get("unfiltered_flows") or 0) > 0)
+        if any("unfiltered_flows" in f for f in fs) else None,
+        "cpg_sanitized_taint_rate": _rate(fs, lambda f: (f.get("sanitized_flows") or 0) > 0)
+        if any("sanitized_flows" in f for f in fs) else None,
         "rag_context_rate": _rate(fs, lambda f: (f.get("rag_hits") or 0) > 0),
     }
     with_status = [r for r in rows if r.get("sast_status")]
@@ -628,7 +677,11 @@ def _fmt_ci(ci) -> str:
 
 
 def _fmt_p(p) -> str:
-    return "—" if p is None else f"{p:.2g}" if p < 0.001 else f"{p:.3f}"
+    if p is None:
+        return "—"
+    if p < 1e-4:
+        return "<1e-4" if p == 0 else f"{p:.2g}"
+    return f"{p:.2g}" if p < 0.001 else f"{p:.3f}"
 
 
 def _md_signal(v: dict, systems: list[str]) -> list[str]:
@@ -813,6 +866,9 @@ def _markdown(report: dict) -> str:
     if cal.get("llm_context_threshold") is not None:
         L.append(f"- LLM-only + context threshold on P(vulnerable): **{cal['llm_context_threshold']:.3f}** "
                  f"(max {objective} on dev)")
+    if cal.get("cascade_unflagged_threshold") is not None:
+        L.append(f"- Cascade unflagged context threshold on P(vulnerable): "
+                 f"**{cal['cascade_unflagged_threshold']:.3f}** (max {objective} on dev)")
     L += ["", "Each pair contributes one vulnerable and one fixed function, so flagging every function scores "
           "F1 0.667, accuracy 0.5 and MCC 0 (the trivial reference row). MCC, accuracy and the pairwise "
           "columns show whether a system actually separates vulnerable from fixed code.", ""]

@@ -7,6 +7,8 @@ REPL's rendering of that value (`val res3: String = "<<HS_...>>...`), while
 the only channel back.
 """
 
+import re
+
 IMPORT_BEGIN, IMPORT_END = "<<HS_IMPORT>>", "<</HS_IMPORT>>"
 TAINT_BEGIN, TAINT_END = "<<HS_TAINT>>", "<</HS_TAINT>>"
 
@@ -18,7 +20,64 @@ PYTHON_SOURCE_REGEX = (
     r").*"
 )
 
+# Sanitizer / validation calls along a Joern taint path or intermediate guard line.
+_SANITIZER_FLOW_RE = re.compile(
+    r"(\b(escape|quote|quote_plus|shlex\.quote|pipes\.quote|html\.escape|markupsafe"
+    r"|bleach\.clean|clean|sanitize\w*|validate\w*|verify\w*|check_\w*|is_safe\w*|safe_join|safe_\w*"
+    r"|secure_filename|has_perm\w*|realpath|abspath|normpath|commonpath|basename"
+    r"|url_has_allowed_host_and_scheme|is_safe_url|urlparse|urlsplit"
+    r"|int|float|bool|UUID|ip_address|isinstance|isdigit|isalnum|isalpha)\s*\("
+    r"|\.startswith\s*\("
+    r"|\.resolve\s*\()",
+    re.I,
+)
+_GUARD_IF_RE = re.compile(
+    r"^\s*if\b.*(\.\.|startswith|isinstance|realpath|abspath|normpath|commonpath|not\s+in\b|\bin\s+[\(\[\{]|is_safe|check_|valid|has_perm)",
+    re.I,
+)
+_EARLY_EXIT_RE = re.compile(r"^\s*(raise|return)\b")
+
 MAX_FLOWS = 5
+
+
+def is_sanitized_flow(flow: list[dict], source_lines: list[str] | None = None) -> bool:
+    """True when any node on `flow` (or an intermediate guard line between the
+    flow's start and sink lines) applies a sanitizer or validation check."""
+    if not flow:
+        return False
+    for node in flow:
+        code = str((node or {}).get("code") or "")
+        if _SANITIZER_FLOW_RE.search(code):
+            return True
+
+    if source_lines:
+        lines = [int(n.get("line", -1)) for n in flow if isinstance(n, dict) and int(n.get("line", -1)) > 0]
+        if lines:
+            lo = max(1, min(lines))
+            hi = min(len(source_lines), max(lines))
+            for idx in range(lo - 1, hi):
+                line_text = source_lines[idx]
+                if idx + 1 < hi and _SANITIZER_FLOW_RE.search(line_text):
+                    return True
+                if _GUARD_IF_RE.search(line_text):
+                    window = source_lines[idx : min(hi, idx + 3)]
+                    if any(_EARLY_EXIT_RE.search(w) or "raise " in w or "return " in w for w in window):
+                        return True
+    return False
+
+
+def classify_taint_paths(
+    flows: list[list[dict]], source_lines: list[str] | None = None
+) -> tuple[list[list[dict]], list[list[dict]]]:
+    """Split Joern `taint_paths` into `(unfiltered_flows, sanitized_flows)`."""
+    unfiltered: list[list[dict]] = []
+    sanitized: list[list[dict]] = []
+    for f in flows or []:
+        if is_sanitized_flow(f, source_lines):
+            sanitized.append(f)
+        else:
+            unfiltered.append(f)
+    return unfiltered, sanitized
 
 
 def _scala_str(value: str) -> str:

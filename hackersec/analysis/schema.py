@@ -10,7 +10,7 @@ class Finding:
     line_start: int
     line_end: int
     rule_id: str
-    tool: str                         # "semgrep" | "bandit"
+    tool: str                         # "semgrep" | "bandit" | "ast_sink" | "codeql"
     severity: str                     # "critical" | "high" | "medium" | "low"
     message: str
     cwe_ids: list[str] = field(default_factory=list)   # e.g. ["CWE-89"]

@@ -39,7 +39,7 @@ from hackersec.evaluation.realworld import sast_cache, split, state
 
 logger = logging.getLogger(__name__)
 
-PIPELINE_VERSION = "v6-sast-gate"
+PIPELINE_VERSION = "v7-hybrid-2seat"
 MIN_FREE_GB = float(os.getenv("REALWORLD_MIN_FREE_GB", "5"))
 USE_CPG = os.getenv("REALWORLD_USE_CPG", "1") not in ("0", "false", "False")
 # function = whole function, no findings; context = that plus same-file callers.
@@ -149,15 +149,20 @@ def _finding_summary(f) -> dict:
     from hackersec.analysis.dedup import has_tool
 
     cpg = f.cpg_context or {}
+    taint_paths = cpg.get("taint_paths") or []
     return {
         "rule_id": f.rule_id,
         "tool": f.tool,
         "also_bandit": has_tool(f, "bandit") and f.tool != "bandit",
+        "also_ast": has_tool(f, "ast_sink") and f.tool != "ast_sink",
+        "also_codeql": has_tool(f, "codeql") and f.tool != "codeql",
         "severity": f.severity,
         "line": f.line_start,
         "cwe_ids": f.cwe_ids,
         "cpg_status": cpg.get("cpg_status"),
-        "taint_paths": len(cpg.get("taint_paths") or []),
+        "taint_paths": len(taint_paths),
+        "unfiltered_flows": cpg.get("unfiltered_flows", len(cpg.get("unfiltered_taint_paths") or [])),
+        "sanitized_flows": cpg.get("sanitized_flows", len(cpg.get("sanitized_taint_paths") or [])),
         "rag_hits": len(f.rag_docs or []),
     }
 
@@ -334,6 +339,8 @@ class Evaluator:
             sast_pred=int(bool(sast)),
             semgrep_pred=int(any(has_tool(f, "semgrep") for f in sast)),
             bandit_pred=int(any(has_tool(f, "bandit") for f in sast)),
+            ast_pred=int(any(has_tool(f, "ast_sink") for f in sast)),
+            codeql_pred=int(any(has_tool(f, "codeql") for f in sast)),
         )
 
         # Extracted once for both the SAST board and the context baseline.

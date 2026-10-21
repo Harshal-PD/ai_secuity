@@ -200,7 +200,7 @@ services:
       - REALWORLD_DIR=/app/workspace/${REALWORLD_DATA:-realworld_python}
       # One directory per run, so a new pipeline version never mixes with
       # (or resumes from) an older run's checkpoints.
-      - REALWORLD_RESULTS_DIR=/app/eval_results/${REALWORLD_RUN:-python_v6}
+      - REALWORLD_RESULTS_DIR=/app/eval_results/${REALWORLD_RUN:-python_v7}
       - SEMGREP_RULES_DIR=/app/workspace/${REALWORLD_DATA:-realworld_python}/semgrep_rules
       - REALWORLD_DATASETS=${REALWORLD_DATASETS:-cvefixes,vudenc,reposvul}
       - REALWORLD_TARGET_REPOSVUL=${REALWORLD_TARGET_REPOSVUL:-1000}

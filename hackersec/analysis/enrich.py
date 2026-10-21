@@ -62,19 +62,37 @@ def enrich_with_cpg(
         return "failed"
 
     failed = 0
+    file_lines_cache: dict[str, list[str]] = {}
     try:
+        from hackersec.analysis.joern.queries import classify_taint_paths
+
         for f in findings:
             rel = _relative_to(f.file_path, root)
             try:
                 f.cpg_context = joern_client.query_taint(
                     project, rel, f.line_start, method_line=method_line, line_end=f.line_end
                 )
+                flows = f.cpg_context.get("taint_paths") or []
+                if flows:
+                    fp = str(f.file_path)
+                    if fp not in file_lines_cache:
+                        try:
+                            file_lines_cache[fp] = Path(fp).read_text(encoding="utf-8", errors="replace").splitlines()
+                        except OSError:
+                            file_lines_cache[fp] = []
+                    unfiltered, sanitized = classify_taint_paths(flows, file_lines_cache.get(fp))
+                    f.cpg_context["unfiltered_taint_paths"] = unfiltered
+                    f.cpg_context["sanitized_taint_paths"] = sanitized
+                    f.cpg_context["unfiltered_flows"] = len(unfiltered)
+                    f.cpg_context["sanitized_flows"] = len(sanitized)
             except (JoernConnectionError, JoernQueryError) as e:
                 failed += 1
                 f.cpg_context = {"cpg_status": "failed", "error": str(e)[:300]}
             logger.info(
                 f"[{job_id}] Taint {rel}:{f.line_start} -> {f.cpg_context.get('cpg_status')} "
-                f"({len(f.cpg_context.get('taint_paths') or [])} flows)"
+                f"({len(f.cpg_context.get('taint_paths') or [])} flows: "
+                f"{f.cpg_context.get('unfiltered_flows', 0)} unfiltered, "
+                f"{f.cpg_context.get('sanitized_flows', 0)} sanitized)"
             )
         if extra is not None:
             try:

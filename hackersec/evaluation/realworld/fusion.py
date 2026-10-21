@@ -30,7 +30,8 @@ _BASE = [
     "evidence_grounded",
     "log_findings",
     "max_severity",
-    "any_taint",
+    "unfiltered_taint",
+    "sanitized_taint",
     "both_tools_flagged",
 ]
 FEATURES = _BASE
@@ -58,6 +59,17 @@ def _num(value, default: float) -> float:
         return default
 
 
+def _taint_split(findings: list[dict]) -> tuple[float, float]:
+    """Return `(unfiltered_taint, sanitized_taint)` for a function's findings."""
+    if any("unfiltered_flows" in f or "sanitized_flows" in f for f in findings):
+        unfiltered = 1.0 if any((f.get("unfiltered_flows") or 0) > 0 for f in findings) else 0.0
+        sanitized = 1.0 if any((f.get("sanitized_flows") or 0) > 0 for f in findings) else 0.0
+        return unfiltered, sanitized
+    # Backward-compatible fallback for older checkpoints that only stored taint_paths count.
+    any_flow = 1.0 if any((f.get("taint_paths") or 0) > 0 for f in findings) else 0.0
+    return any_flow, 0.0
+
+
 def features(record: dict, kind: str = "board") -> list[float] | None:
     """Feature vector for a record whose `kind` debate ran, else None."""
     findings_key, board_key, p_key, _ = _KEYS[kind]
@@ -69,6 +81,14 @@ def features(record: dict, kind: str = "board") -> list[float] | None:
     has_bandit = bool(record.get("bandit_pred")) or any(
         f.get("tool") == "bandit" or f.get("also_bandit") for f in findings
     )
+    has_ast = bool(record.get("ast_pred")) or any(
+        f.get("tool") == "ast_sink" or f.get("also_ast") for f in findings
+    )
+    has_codeql = bool(record.get("codeql_pred")) or any(
+        f.get("tool") == "codeql" or f.get("also_codeql") for f in findings
+    )
+    tool_count = int(has_semgrep) + int(has_bandit) + int(has_ast) + int(has_codeql)
+    unfiltered_taint, sanitized_taint = _taint_split(findings)
     x = [
         _num(record.get(p_key), 0.5),
         _num(board.get("attacker_confidence"), 0.5),
@@ -76,8 +96,9 @@ def features(record: dict, kind: str = "board") -> list[float] | None:
         1.0 if board.get("evidence_grounded") else 0.0,
         math.log1p(len(findings)),
         max(_SEVERITY.get(f.get("severity"), 0.0) for f in findings),
-        1.0 if any((f.get("taint_paths") or 0) > 0 for f in findings) else 0.0,
-        1.0 if (has_semgrep and has_bandit) else 0.0,
+        unfiltered_taint,
+        sanitized_taint,
+        1.0 if tool_count >= 2 else 0.0,
     ]
     if kind == "full":
         n = record.get("n_candidates") or {}

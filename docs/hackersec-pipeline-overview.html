@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HackerSec — SAST-gated pipeline overview</title>
+<style>
+  :root {
+    --bg: #f6f5f2;
+    --paper: #fff;
+    --ink: #1c1b19;
+    --muted: #5c5852;
+    --line: #e4e0d8;
+    --accent: #1f4d3a;
+    --accent-soft: #e7f0eb;
+    --warn: #8a4b12;
+    --warn-soft: #f8efe4;
+    --info: #1d3f66;
+    --info-soft: #e8f0f7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.5 "Segoe UI", system-ui, sans-serif;
+  }
+  header, main { max-width: 1080px; margin: 0 auto; padding: 28px 24px; }
+  header { padding-bottom: 8px; }
+  h1 { font-size: 28px; line-height: 1.2; margin: 0 0 8px; letter-spacing: -0.02em; }
+  h2 { font-size: 20px; margin: 28px 0 10px; }
+  h3 { font-size: 16px; margin: 0 0 8px; }
+  p { margin: 0 0 10px; }
+  .lede { color: var(--muted); max-width: 78ch; }
+  .meta { color: var(--muted); font-size: 13px; }
+  nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 8px; }
+  nav button {
+    border: 1px solid var(--line);
+    background: var(--paper);
+    color: var(--ink);
+    border-radius: 999px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font: inherit;
+  }
+  nav button[aria-selected="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+  section[hidden] { display: none; }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 16px; }
+  .kpi, .card, table, .flow { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; }
+  .kpi { padding: 12px 14px; }
+  .kpi b { display: block; font-size: 22px; }
+  .kpi span { color: var(--muted); font-size: 12px; }
+  .card { padding: 14px 16px; margin: 10px 0; }
+  .grid2 { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 14px; align-items: start; }
+  table { width: 100%; border-collapse: collapse; overflow: hidden; margin: 10px 0 6px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  th { background: #faf9f6; font-weight: 600; }
+  tr.good td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+  tr.warn td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+  code { font-family: ui-monospace, Consolas, monospace; font-size: 0.92em; background: #f1efe9; padding: 0 4px; border-radius: 3px; }
+  .note { background: var(--info-soft); border: 1px solid #d3e1ee; border-radius: 8px; padding: 12px 14px; margin: 12px 0; }
+  .warnbox { background: var(--warn-soft); border: 1px solid #ead8c4; border-radius: 8px; padding: 12px 14px; margin: 12px 0; }
+  .ok { background: var(--accent-soft); border: 1px solid #cfe0d6; border-radius: 8px; padding: 12px 14px; margin: 12px 0; }
+  ul { margin: 6px 0 0; padding-left: 18px; }
+  li { margin: 4px 0; }
+  .bar { display: flex; height: 14px; background: #eeeae3; border-radius: 99px; overflow: hidden; margin: 6px 0 14px; }
+  .bar i { display: block; height: 100%; }
+  .flow { padding: 16px; }
+  .flow ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .flow li { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+  .flow li strong { display: block; }
+  .flow li span { color: var(--muted); font-size: 13px; }
+  .caption { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  @media (max-width: 800px) {
+    .kpis, .grid2 { grid-template-columns: 1fr; }
+  }
+  @media print {
+    body { background: #fff; }
+    nav { display: none; }
+    section[hidden] { display: block !important; }
+    header, main { max-width: none; }
+    .card, table, .kpi, .flow { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <p class="meta">Exported from the Cursor canvas on 16 Oct 2026 · pipeline <code>v6-sast-gate</code> · model qwen2.5-coder:14b</p>
+  <h1>HackerSec: SAST-gated adversarial pipeline</h1>
+  <p class="lede">Static analysis decides which functions an LLM is allowed to see. Semgrep and Bandit gate the function. Flagged functions get same-file callers, a Joern data-flow path, and a CWE note, then a three-seat board. A logistic regression fitted only on the dev split turns those signals into the final yes or no.</p>
+  <div class="kpis">
+    <div class="kpi"><b>2,506</b><span>functions in the v6 pool</span></div>
+    <div class="kpi"><b>0.192</b><span>clean-subset MCC, fusion</span></div>
+    <div class="kpi"><b>78.4%</b><span>static false positives removed, clean</span></div>
+    <div class="kpi"><b>77.9%</b><span>test functions that skip the LLM</span></div>
+  </div>
+  <nav>
+    <button aria-selected="true" data-tab="arch">Architecture</button>
+    <button data-tab="runs">Six evaluation runs</button>
+    <button data-tab="v6">v6 results and cost</button>
+    <button data-tab="fusion">Fusion weights</button>
+  </nav>
+</header>
+<main>
+<section id="arch">
+  <h2>How one function is decided</h2>
+  <div class="grid2">
+    <div class="flow">
+      <ol>
+        <li><strong>1. Paired function</strong><span>Pre-fix code is labeled vulnerable. The same function after the security commit is labeled fixed. Repositories are split 20/80 so no project is in both dev and test.</span></li>
+        <li><strong>2. Semgrep + Bandit</strong><span>Ten Semgrep packs, INFO mapped to low, Bandit with <code>-l -i</code>. Findings outside the function span are dropped. Collisions on the same line and CWE are merged, and a second tool is kept as a tag. No finding means the function is safe and the LLM is never called.</span></li>
+        <li><strong>3. Enrichment, only if flagged</strong><span>Same-file callers and callees, a Joern flow from the function’s parameters to the sink lines, and a CWE or OWASP note (exact id first, then vector search).</span></li>
+        <li><strong>4. Board</strong><span>Attacker and Defender write independent briefs in parallel. A string check verifies the Defender’s sanitizer quote. The Judge (temperature 0, one vote) sees that check and both briefs.</span></li>
+        <li><strong>5. Fusion</strong><span>Eight numbers already recorded by the run go into a logistic regression fit on flagged dev functions. Threshold 0.597. No extra model call.</span></li>
+      </ol>
+    </div>
+    <div>
+      <div class="card">
+        <h3>What “SAST board + fusion” is</h3>
+        <p>It is the final verdict of the evaluated pipeline, not a second scanner and not another LLM. Functions with no static finding stay safe. Flagged functions are scored from the Judge probability, Attacker confidence, Defender safety, whether the sanitizer quote was in the code, finding count, max severity, any Joern path, and whether both tools agreed.</p>
+      </div>
+      <div class="warnbox">
+        <strong>Eval path and the live worker differ.</strong>
+        <p>The benchmark uses <code>deliberate_function</code> plus the dev-fitted model in <code>hackersec/evaluation/realworld/fusion.py</code>. The Celery worker behind the upload UI still debates each finding separately and uses the older synthetic fusion classifier.</p>
+      </div>
+    </div>
+  </div>
+
+  <h2>Rows in the report</h2>
+  <table>
+    <thead>
+      <tr><th>Row</th><th>LLM calls</th><th>Decision</th><th>Combined / clean MCC</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Semgrep + Bandit</td><td>0</td><td>Any finding inside the function</td><td>0.075 / 0.075</td></tr>
+      <tr><td>SAST board: Judge vote</td><td>3, only if flagged</td><td>Judge says VULNERABLE</td><td>0.097 / 0.110</td></tr>
+      <tr><td>SAST board, dev-tuned threshold</td><td>3, only if flagged</td><td>Judge probability ≥ 0.800</td><td>0.098 / 0.108</td></tr>
+      <tr class="good"><td>SAST board + fusion</td><td>3, only if flagged</td><td>Regression score ≥ 0.597</td><td>0.133 / 0.192</td></tr>
+      <tr><td>LLM only, no SAST</td><td>1 on every function</td><td>One prompt, threshold 0.200</td><td>0.076 / 0.082</td></tr>
+      <tr><td>LLM + same-file context</td><td>1 on every function</td><td>One prompt plus callers, threshold 0.900</td><td>0.091 / 0.097</td></tr>
+    </tbody>
+  </table>
+  <p class="caption">LLM-only rows are comparison baselines. They are not inputs to fusion. Source: eval_results/python_v6/report_latest.md, 15 Oct 2026.</p>
+</section>
+
+<section id="runs" hidden>
+  <h2>Six evaluation campaigns</h2>
+  <p class="lede">Each later run exists because the previous one failed in a specific way. Numbers below are the held-out result of that campaign, not a mix of pipelines.</p>
+  <table>
+    <thead>
+      <tr><th>Run</th><th>Data</th><th>What was in the pipeline</th><th>Result</th><th>What that run showed</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1. Synthetic</td><td>24 textbook functions</td><td>Per-finding board and a synthetic fusion model</td><td>Seats and the quote check worked on short snippets</td><td>Not a substitute for real fix commits</td></tr>
+      <tr class="warn"><td>2. realworld, 27–28 Sep</td><td>1,498 functions, CVEfixes + VUDENC</td><td>Per-finding board, mandatory quote override, synthetic fusion</td><td>Board F1 0.328 vs SAST 0.329; 4.6% of false positives removed</td><td>The override flipped almost every SAFE ruling back to vulnerable. Synthetic fusion copied SAST.</td></tr>
+      <tr><td>3. Phase 0–2, 29 Sep</td><td>Same pair pool, new harness</td><td>One debate per function, evidence recorded not forced, repo-disjoint split, cached SAST</td><td>Report gained MCC, J, clean subset, and CWE families</td><td>SAST still caps recall near a quarter of vulnerable functions</td></tr>
+      <tr class="warn"><td>4. v3-candidates-board, 30 Sep</td><td>1,500 functions, 300 dev / 1,200 test</td><td>Plus an LLM auditor, LLM-labeled taint, and a second board</td><td>SAST board vote removed 40.2% of static false positives and kept 71.1% of true positives</td><td>F1 tuning on a 50/50 set picked a threshold that flags everything. The auditor flagged 96.7% of functions. About 21 minutes per function.</td></tr>
+      <tr><td>5. v5-guard-check, 3 Oct</td><td>1,006 ReposVul functions</td><td>MCC tuning, one Judge vote, Joern retries, a Judge “required check” field</td><td>Calibrated board MCC 0.146; 53.4% of false positives removed, 71.8% of true positives kept</td><td>LLM taint had negative J (−0.042). The guard check conceded most of the time. The candidates board lost to SAST.</td></tr>
+      <tr class="good"><td>6. v6-sast-gate, 15 Oct</td><td>2,506 functions, all three datasets</td><td>SAST gate only, parallel seats, wider rules, 8-feature fusion, LLM-only baselines</td><td>Fusion MCC 0.133 combined, 0.192 on single-function fixes</td><td>The only row whose MCC gain over SAST has a confidence interval entirely above zero. Three full prompts make it cost more tokens per function than one prompt on every function.</td></tr>
+    </tbody>
+  </table>
+  <h3>False-positive removal on functions static analysis already flagged</h3>
+  <table>
+    <thead><tr><th>System</th><th>False positives removed</th><th>True positives kept</th></tr></thead>
+    <tbody>
+      <tr><td>v1 board</td><td>4.6%</td><td>98.8%</td></tr>
+      <tr><td>v3 board vote</td><td>40.2%</td><td>71.1%</td></tr>
+      <tr><td>v5 calibrated board, ReposVul</td><td>53.4%</td><td>71.8%</td></tr>
+      <tr><td>v6 board vote, pooled</td><td>39.5%</td><td>73.0%</td></tr>
+      <tr><td>v6 fusion, pooled</td><td>64.2%</td><td>59.9%</td></tr>
+      <tr class="good"><td>v6 fusion, single-function fixes</td><td>78.4%</td><td>58.3%</td></tr>
+    </tbody>
+  </table>
+  <p class="caption">Mean board time per flagged function: v3 SAST board 446 s, v5 190 s, v6 93 s.</p>
+</section>
+
+<section id="v6" hidden>
+  <h2>v6 held-out test</h2>
+  <p>2,004 test functions, 1,002 pairs. Dev (502 functions) was used only to pick thresholds. A pair is one vulnerable function and its fixed version, so flagging everything scores MCC 0 and J 0.</p>
+  <table>
+    <thead>
+      <tr><th>Slice</th><th>SAST J / MCC</th><th>Fusion J / MCC</th><th>Fusion precision</th><th>Fusion FPR</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Combined, 2,004</td><td>+0.062 / 0.075</td><td>+0.083 / 0.133</td><td>0.690</td><td>0.068</td></tr>
+      <tr class="good"><td>Clean, 676</td><td>+0.065 / 0.075</td><td>+0.118 / 0.192</td><td>0.778</td><td>0.047</td></tr>
+      <tr><td>ReposVul, 804</td><td>+0.067 / 0.081</td><td>+0.085 / 0.138</td><td>0.702</td><td>0.062</td></tr>
+      <tr><td>CVEfixes, 800</td><td>+0.055 / 0.068</td><td>+0.068 / 0.116</td><td>0.680</td><td>0.060</td></tr>
+      <tr><td>VUDENC, 400</td><td>+0.065 / 0.075</td><td>+0.110 / 0.154</td><td>0.683</td><td>0.095</td></tr>
+    </tbody>
+  </table>
+  <p class="caption">Combined fusion vs SAST: ΔMCC confidence interval [+0.027, +0.088]. Clean: [+0.056, +0.174]. Likelihood ratio 2.22 combined, 3.50 on the clean subset.</p>
+
+  <h2>Tokens on the combined test</h2>
+  <p>442 of 2,004 functions were sent to the board. The rest exited at the static gate.</p>
+  <div class="bar" title="252 vulnerable flagged, 190 fixed flagged, 1562 not sent">
+    <i style="width:12.6%;background:#1f4d3a"></i>
+    <i style="width:9.5%;background:#c47a2c"></i>
+  </div>
+  <p class="caption">Green: vulnerable functions the gate sent on (252). Amber: fixed functions the gate sent on (190). Remainder: not sent (1,562).</p>
+  <table>
+    <thead>
+      <tr><th>System</th><th>Functions sent</th><th>Mean tokens / function</th><th>True positives</th><th>Tokens / true positive</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Semgrep + Bandit</td><td>0</td><td>0</td><td>252</td><td>0</td></tr>
+      <tr class="warn"><td>SAST board</td><td>442</td><td>1,312</td><td>178</td><td>14,771</td></tr>
+      <tr><td>LLM only</td><td>2,004</td><td>1,052</td><td>312</td><td>6,758</td></tr>
+      <tr><td>LLM + context</td><td>2,004</td><td>1,214</td><td>281</td><td>8,657</td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    The gate skips 77.9% of functions, but each flagged function is prompted three times with the full packet (about 5,950 tokens). Averaged over every function, the board costs more than one prompt on the whole set. Fusion’s 151 true positives would be even more expensive per detection than the 178 counted for the calibrated board.
+  </div>
+
+  <h2>Where the gate can and cannot see the bug</h2>
+  <table>
+    <thead>
+      <tr><th>Family</th><th>Functions</th><th>Vulnerable flagged by SAST</th><th>SAST MCC</th><th>LLM + context MCC</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Pattern-matchable</td><td>1,088</td><td>34.2%</td><td>0.116</td><td>0.134</td></tr>
+      <tr class="warn"><td>Logic and semantic</td><td>916</td><td>14.4%</td><td>0.016</td><td>0.029</td></tr>
+      <tr><td>Injection</td><td>600</td><td>40.7%</td><td>0.130</td><td>0.142</td></tr>
+      <tr class="warn"><td>Path traversal</td><td>190</td><td>17.9%</td><td>0.073</td><td>0.212</td></tr>
+      <tr><td>Deserialization</td><td>36</td><td>94.4%</td><td>0.543</td><td>0.298</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="fusion" hidden>
+  <h2>The fitted model</h2>
+  <p>79 flagged dev functions, 5-fold cross-validation, regularization C = 0.4, threshold 0.597. Weights are on standardized features. A positive weight raises the chance the function is called vulnerable.</p>
+  <table>
+    <thead>
+      <tr><th>Feature</th><th>Dev mean</th><th>Weight</th><th>Reading</th></tr>
+    </thead>
+    <tbody>
+      <tr class="good"><td>defender_safety</td><td>0.533</td><td>−0.835</td><td>Largest effect. A high Defender safety score suppresses the alert.</td></tr>
+      <tr><td>p_vulnerable</td><td>0.662</td><td>+0.208</td><td>The Judge’s probability still counts, in the expected direction.</td></tr>
+      <tr><td>max_severity</td><td>0.525</td><td>+0.195</td><td>Critical and high rules are more often real.</td></tr>
+      <tr><td>evidence_grounded</td><td>0.203</td><td>−0.190</td><td>A sanitizer quote that is actually in the code lowers the score.</td></tr>
+      <tr class="warn"><td>attacker_confidence</td><td>0.871</td><td>−0.170</td><td>The Attacker is almost always confident, so the weight is not a useful exploit signal.</td></tr>
+      <tr class="warn"><td>any_taint</td><td>0.646</td><td>−0.154</td><td>Joern still reports a path after a sanitizer is added, so “has a flow” fires on fixed code too.</td></tr>
+      <tr><td>log_findings</td><td>0.930</td><td>−0.142</td><td>A pile of low-severity hits is slightly less precise.</td></tr>
+      <tr><td>both_tools_flagged</td><td>0.291</td><td>+0.060</td><td>Semgrep and Bandit agreeing is a small positive.</td></tr>
+    </tbody>
+  </table>
+  <p class="caption">Source: eval_results/python_v6/fusion_model.json</p>
+
+  <h2>What the weights imply for a next run</h2>
+  <div class="card">
+    <h3>Use the static packet as the attack brief</h3>
+    <p>Drop the Attacker model call. Let the Defender answer the Semgrep, Bandit, and Joern packet, then the Judge. That restores a direct rebuttal, removes a seat whose confidence is nearly constant, and cuts the three prompts to two.</p>
+  </div>
+  <div class="card">
+    <h3>Split Joern paths into unfiltered and guarded</h3>
+    <p>A flow that passes through a quote, a realpath, or a dominating check should not be the same feature as a flow that does not. The current any-taint bit is why the weight is negative.</p>
+  </div>
+  <div class="card">
+    <h3>A zero-token sink check for paths and requests</h3>
+    <p>On path traversal the gate sees 17.9% of the vulnerable functions. An AST check for parameters flowing into file, archive, and HTTP calls would send those functions to the board without prompting the other 78%.</p>
+  </div>
+</section>
+</main>
+<script>
+  const buttons = document.querySelectorAll("nav button");
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      buttons.forEach((b) => b.setAttribute("aria-selected", String(b === btn)));
+      document.querySelectorAll("main > section").forEach((s) => {
+        s.hidden = s.id !== btn.dataset.tab;
+      });
+    });
+  });
+</script>
+</body>
+</html>

@@ -26,12 +26,14 @@ from hackersec.analysis.llm.parser import (
 )
 from hackersec.analysis.llm.evidence import check_sanitizer_evidence
 from hackersec.analysis.llm.function_prompter import (
+    DEFENDER_CODE_CHARS,
     MIN_CODE_CHARS,
     build_function_attacker_prompt,
     build_function_defender_prompt,
     build_function_judge_prompt,
     code_budget,
     fit_function_code,
+    synthesize_sast_attacker,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,6 +59,10 @@ OVERRIDE_CONFIDENCE_FLOOR = 0.5
 # always agree, so the default is one vote at TEMP_JUDGE.
 JUDGE_VOTES = int(os.getenv("LLM_JUDGE_VOTES", "1"))
 TEMP_JUDGE_VOTE = float(os.getenv("LLM_JUDGE_VOTE_TEMP", "0.7"))
+# By default, the SAST + Joern finding packet acts as the Challenger claim
+# (0 LLM tokens), and the 2-seat board runs Defender -> Judge. Set
+# LLM_USE_ATTACKER=1 to run a separate Attacker LLM seat.
+USE_LLM_ATTACKER = os.getenv("LLM_USE_ATTACKER", "0") in ("1", "true", "True")
 # signal   -- the evidence check is recorded as a feature, never flips a vote
 # override -- a SAFE majority whose sanitizer quote is not in the code is
 #             overturned to VULNERABLE (the per-finding rule, for ablation)
@@ -64,8 +70,8 @@ TEMP_JUDGE_VOTE = float(os.getenv("LLM_JUDGE_VOTE_TEMP", "0.7"))
 EVIDENCE_MODE = os.getenv("LLM_EVIDENCE_MODE", "signal").strip().lower()
 # Answer caps for the function-level seats. A capped, unfinished JSON answer
 # is parsed as a failed vote rather than stalling a parallel slot.
-SEAT_MAX_TOKENS = 800
-VOTE_MAX_TOKENS = 500
+SEAT_MAX_TOKENS = 400
+VOTE_MAX_TOKENS = 350
 
 
 class AdversarialBoard:
@@ -233,10 +239,10 @@ class AdversarialBoard:
             raise ValueError(f"evidence_mode must be signal, override or off, got {mode!r}")
 
         num_ctx = getattr(self.client, "num_ctx", 4096)
-        code_text, code_truncated = fit_function_code(
-            code, start_line, [f.line_start for f in findings],
-            max(MIN_CODE_CHARS, code_budget(num_ctx) - len(context)),
-        )
+        focus_lines = [f.line_start for f in findings]
+        full_budget = max(MIN_CODE_CHARS, code_budget(num_ctx) - len(context))
+        code_text, code_truncated = fit_function_code(code, start_line, focus_lines, full_budget)
+        def_code_text, _ = fit_function_code(code, start_line, focus_lines, min(DEFENDER_CODE_CHARS, full_budget))
         prompt_tokens = []
         usage = {"prompt": 0, "completion": 0, "calls": 0}
         usage_lock = threading.Lock()
@@ -253,22 +259,25 @@ class AdversarialBoard:
                     usage["calls"] += 1
             return res
 
-        # Attacker and Defender submit independent first-round briefs in
-        # parallel: neither side anchors the other, and wall-clock latency
-        # drops by one full generation round.
-        atk_prompt = build_function_attacker_prompt(function_name, code_text, findings, context)
-        def_prompt = build_function_defender_prompt(function_name, code_text, findings, None, context)
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            fut_atk = pool.submit(call, atk_prompt, self.model_attacker, TEMP_ATTACKER)
-            fut_def = pool.submit(call, def_prompt, self.model_defender, TEMP_DEFENDER)
-            res_atk = fut_atk.result()
-            res_def = fut_def.result()
+        # 2-seat Challenger -> Defender -> Judge by default: the SAST + Joern
+        # packet is the Challenger claim (0 LLM tokens), the Defender directly
+        # rebuts it on a compact window around the flagged lines, and the Judge
+        # rules on [SAST+Joern Alert + Defender Quote + Automated Quote Check].
+        if USE_LLM_ATTACKER:
+            atk_prompt = build_function_attacker_prompt(function_name, def_code_text, findings, "")
+            res_atk = call(atk_prompt, self.model_attacker, TEMP_ATTACKER)
+            if res_atk["llm_status"] != "success":
+                return self._transport_failure(res_atk)
+            attacker = parse_function_attacker_response(res_atk["response"])
+        else:
+            attacker = synthesize_sast_attacker(findings)
 
-        if res_atk["llm_status"] != "success":
-            return self._transport_failure(res_atk)
+        def_prompt = build_function_defender_prompt(
+            function_name, def_code_text, findings, attacker, "", include_rag=False
+        )
+        res_def = call(def_prompt, self.model_defender, TEMP_DEFENDER)
         if res_def["llm_status"] != "success":
             return self._transport_failure(res_def)
-        attacker = parse_function_attacker_response(res_atk["response"])
         defender = parse_defender_response(res_def["response"])
 
         evidence = check_sanitizer_evidence(code, defender.get("sanitization_evidence"))

@@ -16,6 +16,7 @@ from hackersec.analysis.joern.queries import (
     build_delete_query,
     build_import_query,
     build_taint_query,
+    classify_taint_paths,
 )
 
 logger = logging.getLogger(__name__)
@@ -199,9 +200,14 @@ class JoernClient:
             except json.JSONDecodeError as e:
                 raise JoernQueryError(f"Unparseable taint result: {e}")
             flows = data.get("flows") or []
+            unfiltered, sanitized = classify_taint_paths(flows)
             return {
                 "cpg_status": "success" if flows else "no_flow_found",
                 "taint_paths": flows,
+                "unfiltered_taint_paths": unfiltered,
+                "sanitized_taint_paths": sanitized,
+                "unfiltered_flows": len(unfiltered),
+                "sanitized_flows": len(sanitized),
                 "sink_calls": data.get("sinks", 0),
                 "sources": data.get("sources", 0),
             }
@@ -209,12 +215,34 @@ class JoernClient:
         # Plain JSON array or a "no flows" message.
         if not (output.startswith("[") and output.endswith("]")):
             if "No flows" in output or "empty" in output:
-                return {"cpg_status": "no_flow_found", "taint_paths": []}
+                return {
+                    "cpg_status": "no_flow_found",
+                    "taint_paths": [],
+                    "unfiltered_taint_paths": [],
+                    "sanitized_taint_paths": [],
+                    "unfiltered_flows": 0,
+                    "sanitized_flows": 0,
+                }
             raise JoernQueryError(f"Unexpected Joern query output: {output[:300]}")
         try:
             flows = json.loads(output)
         except json.JSONDecodeError as e:
             raise JoernQueryError(f"Failed to query taint flow: {e}")
         if not flows:
-            return {"cpg_status": "no_flow_found", "taint_paths": []}
-        return {"cpg_status": "success", "taint_paths": flows}
+            return {
+                "cpg_status": "no_flow_found",
+                "taint_paths": [],
+                "unfiltered_taint_paths": [],
+                "sanitized_taint_paths": [],
+                "unfiltered_flows": 0,
+                "sanitized_flows": 0,
+            }
+        unfiltered, sanitized = classify_taint_paths(flows)
+        return {
+            "cpg_status": "success",
+            "taint_paths": flows,
+            "unfiltered_taint_paths": unfiltered,
+            "sanitized_taint_paths": sanitized,
+            "unfiltered_flows": len(unfiltered),
+            "sanitized_flows": len(sanitized),
+        }

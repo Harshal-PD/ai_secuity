@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 SAST_DIR = state.CACHE_DIR / "sast"
 BATCH_SIZE = int(os.getenv("REALWORLD_SAST_BATCH", "25"))
-TOOLS = ("semgrep", "bandit")
+TOOLS = ("semgrep", "bandit", "ast_sink", "codeql")
 
 
 @lru_cache(maxsize=1)
@@ -68,11 +68,36 @@ def _scan_tool(tool: str, files: list[str]) -> dict[str, dict]:
     """{file: {"status", "findings"}} for one tool over a batch of files."""
     from hackersec.analysis import static
 
+    paths = [Path(f) for f in files]
+    if tool == "ast_sink":
+        by_path = static.run_ast_sinks_batch(paths, job_id="realworld")
+        return {
+            f: {"status": "ok", "findings": _as_dicts(by_path.get(str(p.resolve()), []), f)}
+            for f, p in zip(files, paths)
+        }
+
+    if tool == "codeql":
+        if not static.codeql_available():
+            return {f: {"status": "unavailable", "findings": []} for f in files}
+        by_path = static.run_codeql_batch(paths, job_id="realworld") if len(paths) > 1 else None
+        if by_path is not None:
+            return {
+                f: {"status": "ok", "findings": _as_dicts(by_path.get(str(p.resolve()), []), f)}
+                for f, p in zip(files, paths)
+            }
+        out = {}
+        for f, p in zip(files, paths):
+            res = static._run_codeql_cmd([p], "realworld")
+            if res is None:
+                out[f] = {"status": "failed", "findings": []}
+            else:
+                out[f] = {"status": "ok", "findings": _as_dicts(res, f)}
+        return out
+
     batch_fn = static.run_semgrep_batch if tool == "semgrep" else static.run_bandit_batch
-    single_fn = static._run_semgrep_cmd if tool == "semgrep" else static._run_bandit_cmd
+    single_fn = static._run_semgrep_cmd if tool == "semgrep" else static._bandit_cmd if hasattr(static, "_bandit_cmd") else static._run_bandit_cmd
     parse_fn = static._semgrep_findings if tool == "semgrep" else static._bandit_findings
 
-    paths = [Path(f) for f in files]
     by_path = batch_fn(paths, job_id="realworld") if len(paths) > 1 else None
     out = {}
     if by_path is not None:
@@ -104,7 +129,7 @@ def prescan(files: list[str], progress=None) -> dict:
             entry = {"file": f, "rules_signature": signature}
             for tool in TOOLS:
                 entry[tool] = results[tool][f]
-            failed += any(entry[t]["status"] != "ok" for t in TOOLS)
+            failed += any(entry[t]["status"] == "failed" for t in TOOLS)
             _save(f, signature, entry)
         if progress:
             progress(min(i + BATCH_SIZE, len(todo)), len(todo))

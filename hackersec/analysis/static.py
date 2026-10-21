@@ -117,10 +117,11 @@ def _semgrep_configs() -> list[str]:
 def rules_signature() -> str:
     """Identifies the exact rule set, so cached scan results are reused only
     while the rules are unchanged."""
-    h = hashlib.sha1(b"v6-info-low-bandit-li")
+    h = hashlib.sha1(b"v7-2seat-sast-ast-codeql")
     for cfg in _semgrep_configs():
         p = Path(cfg)
         h.update(p.read_bytes() if p.is_file() else cfg.encode())
+    h.update(b"codeql:1" if codeql_available() else b"codeql:0")
     return h.hexdigest()[:16]
 
 
@@ -320,6 +321,517 @@ def _bandit_findings(data: dict, job_id: str) -> list[Finding]:
     return findings
 
 
+# ─── Zero-Token Python AST Sink & Guard Scanner ─────────────────────────────
+
+import ast
+import re
+import shutil
+import tempfile
+
+ENABLE_AST_SINKS = os.getenv("SAST_ENABLE_AST_SINKS", "1") not in ("0", "false", "False")
+
+_AST_INPUT_ATTRS = {
+    "args", "form", "values", "GET", "POST", "cookies", "headers",
+    "data", "json", "files", "query_params", "body", "params", "get_json",
+    "environ", "argv",
+}
+_AST_PATH_GUARDS = {
+    "realpath", "abspath", "normpath", "commonpath", "commonprefix",
+    "basename", "secure_filename", "safe_join", "is_safe_path", "relative_to",
+}
+_AST_URL_GUARDS = {
+    "urlparse", "urlsplit", "url_has_allowed_host_and_scheme",
+    "is_safe_url", "is_valid_url", "validate_url",
+}
+_AST_VALUE_GUARDS = {
+    "int", "float", "bool", "UUID", "uuid4", "ip_address", "isinstance",
+    "isdigit", "isalnum", "isalpha", "quote", "quote_plus", "escape",
+    "clean", "sanitize", "validate",
+}
+_AST_GUARD_NAMES = _AST_PATH_GUARDS | _AST_URL_GUARDS | _AST_VALUE_GUARDS
+
+_AST_PATH_SINKS = {
+    "open", "io.open", "os.open", "os.remove", "os.unlink", "os.rmdir",
+    "os.listdir", "os.stat", "os.lstat", "os.makedirs", "os.mkdir",
+    "shutil.rmtree", "shutil.copy", "shutil.copyfile", "shutil.copy2", "shutil.move",
+    "send_file", "flask.send_file", "send_from_directory", "flask.send_from_directory",
+    "tarfile.open", "zipfile.ZipFile", "Path", "pathlib.Path",
+}
+_AST_PATH_METHODS = {"extractall", "extract", "read_text", "read_bytes", "write_text", "write_bytes"}
+_AST_SSRF_SINKS = {
+    "requests.get", "requests.post", "requests.put", "requests.delete",
+    "requests.head", "requests.patch", "requests.request",
+    "urllib.request.urlopen", "urllib.urlopen", "urlopen",
+    "httpx.get", "httpx.post", "httpx.put", "httpx.delete", "httpx.request",
+}
+_AST_REDIRECT_SINKS = {
+    "redirect", "flask.redirect", "django.shortcuts.redirect",
+    "HttpResponseRedirect", "RedirectResponse",
+}
+_AST_CMD_SINKS = {
+    "os.system", "os.popen", "commands.getoutput", "commands.getstatusoutput",
+    "subprocess.Popen", "subprocess.run", "subprocess.call",
+    "subprocess.check_output", "subprocess.check_call",
+}
+_AST_CODE_SINKS = {"eval", "exec", "compile", "__import__", "importlib.import_module"}
+_AST_DESER_SINKS = {
+    "pickle.loads", "pickle.load", "cPickle.loads", "cPickle.load",
+    "marshal.loads", "marshal.load", "yaml.unsafe_load", "jsonpickle.decode",
+}
+
+
+def _call_name(node: ast.AST) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        prefix = _call_name(node.value)
+        return f"{prefix}.{node.attr}" if prefix else node.attr
+    return ""
+
+
+def _names_in(node: ast.AST) -> set[str]:
+    return {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
+
+
+def _has_input_source(node: ast.AST) -> bool:
+    for sub in ast.walk(node):
+        if isinstance(sub, ast.Attribute) and sub.attr in _AST_INPUT_ATTRS:
+            base = _call_name(sub.value)
+            if base in ("request", "flask.request", "self.request", "os", "sys"):
+                return True
+        if isinstance(sub, ast.Call) and _call_name(sub.func) in ("input", "raw_input", "os.getenv"):
+            return True
+    return False
+
+
+def _calls_guard(node: ast.AST, extra_guards: set[str] | None = None) -> bool:
+    guards = _AST_GUARD_NAMES | (extra_guards or set())
+    for sub in ast.walk(node):
+        if isinstance(sub, ast.Call):
+            cname = _call_name(sub.func)
+            leaf = cname.split(".")[-1]
+            if cname in guards or leaf in guards or leaf.startswith(("sanitize", "validate", "check_", "is_safe", "safe_")):
+                return True
+            if leaf == "startswith":
+                return True
+    return False
+
+
+def _has_raise_or_return(stmts: list[ast.stmt]) -> bool:
+    for s in stmts:
+        for sub in ast.walk(s):
+            if isinstance(sub, (ast.Raise, ast.Return)):
+                return True
+    return False
+
+
+def _scan_ast_function(
+    fn: ast.FunctionDef | ast.AsyncFunctionDef,
+    file_path: str,
+    job_id: str,
+) -> list[Finding]:
+    params: set[str] = set()
+    for arg in (
+        list(getattr(fn.args, "posonlyargs", []))
+        + list(fn.args.args)
+        + list(fn.args.kwonlyargs)
+    ):
+        if arg.arg not in ("self", "cls"):
+            params.add(arg.arg)
+    if fn.args.vararg and fn.args.vararg.arg not in ("self", "cls"):
+        params.add(fn.args.vararg.arg)
+    if fn.args.kwarg and fn.args.kwarg.arg not in ("self", "cls"):
+        params.add(fn.args.kwarg.arg)
+
+    tainted: set[str] = set(params)
+    guarded_vars: set[str] = set()
+    has_path_guard = False
+    has_url_guard = False
+
+    # Pass 1: find branch guards (`if ...: raise/return`) and sanitizer calls
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Call):
+            cname = _call_name(node.func)
+            leaf = cname.split(".")[-1]
+            if leaf in _AST_PATH_GUARDS or cname in _AST_PATH_GUARDS or leaf == "startswith":
+                has_path_guard = True
+                for a in node.args:
+                    guarded_vars.update(_names_in(a))
+            if leaf in _AST_URL_GUARDS or cname in _AST_URL_GUARDS:
+                has_url_guard = True
+                for a in node.args:
+                    guarded_vars.update(_names_in(a))
+        elif isinstance(node, ast.If):
+            if _has_raise_or_return(node.body) or _has_raise_or_return(node.orelse):
+                test_names = _names_in(node.test)
+                test_src = ast.unparse(node.test) if hasattr(ast, "unparse") else ""
+                if (
+                    _calls_guard(node.test)
+                    or ".." in test_src
+                    or " in " in test_src
+                    or "not in" in test_src
+                    or "startswith" in test_src
+                    or "scheme" in test_src
+                    or "netloc" in test_src
+                ):
+                    guarded_vars.update(test_names)
+                    if ".." in test_src or "startswith" in test_src or "realpath" in test_src or "abspath" in test_src:
+                        has_path_guard = True
+                    if "scheme" in test_src or "netloc" in test_src or "host" in test_src:
+                        has_url_guard = True
+
+    # Pass 2: propagate taint through assignments
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Assign) and node.value is not None:
+            targets = [t.id for t in node.targets if isinstance(t, ast.Name)]
+            if _calls_guard(node.value):
+                for t in targets:
+                    guarded_vars.add(t)
+                    tainted.discard(t)
+            else:
+                rhs_names = _names_in(node.value)
+                if (rhs_names & (tainted - guarded_vars)) or _has_input_source(node.value):
+                    for t in targets:
+                        if t not in guarded_vars:
+                            tainted.add(t)
+
+    active_taint = tainted - guarded_vars
+    findings: list[Finding] = []
+    seen_lines: set[tuple[int, str]] = set()
+
+    def emit(line: int, end_line: int, rule_id: str, severity: str, cwe: str, owasp: str, msg: str) -> None:
+        key = (line, cwe)
+        if key in seen_lines:
+            return
+        seen_lines.add(key)
+        findings.append(
+            Finding(
+                job_id=job_id,
+                file_path=file_path,
+                line_start=line,
+                line_end=max(line, end_line),
+                rule_id=rule_id,
+                tool="ast_sink",
+                severity=severity,
+                message=msg,
+                cwe_ids=[cwe],
+                owasp_category=owasp,
+                code_snippet=_extract_snippet(file_path, line, max(line, end_line)),
+            )
+        )
+
+    for node in ast.walk(fn):
+        if not isinstance(node, ast.Call):
+            continue
+        cname = _call_name(node.func)
+        leaf = cname.split(".")[-1]
+        line = getattr(node, "lineno", fn.lineno)
+        end_line = getattr(node, "end_lineno", line) or line
+        arg_nodes = list(node.args) + [kw.value for kw in node.keywords if kw.value is not None]
+        arg_names = set().union(*(_names_in(a) for a in arg_nodes)) if arg_nodes else set()
+        arg_tainted = bool(arg_names & active_taint) or any(_has_input_source(a) for a in arg_nodes)
+        arg_guarded_inline = any(_calls_guard(a) for a in arg_nodes)
+
+        # 1. Path traversal sinks (CWE-22)
+        if (cname in _AST_PATH_SINKS or leaf in ("send_file", "send_from_directory")) and arg_tainted and not arg_guarded_inline and not has_path_guard:
+            emit(
+                line, end_line, "HS-AST-PATH", "medium", "CWE-22", "A01:2021",
+                f"Unguarded parameter or input reaches file/path sink `{cname}` without path normalization or prefix validation.",
+            )
+        elif cname in ("os.path.join", "posixpath.join", "ntpath.join") and len(node.args) >= 2:
+            tail_names = set().union(*(_names_in(a) for a in node.args[1:]))
+            if ((tail_names & active_taint) or any(_has_input_source(a) for a in node.args[1:])) and not arg_guarded_inline and not has_path_guard:
+                emit(
+                    line, end_line, "HS-AST-PATH-JOIN", "medium", "CWE-22", "A01:2021",
+                    f"Unguarded parameter joined into path via `{cname}` without `realpath`/`abspath` + `startswith` or `safe_join` check.",
+                )
+        elif isinstance(node.func, ast.Attribute) and node.func.attr in _AST_PATH_METHODS:
+            recv_names = _names_in(node.func.value)
+            if ((recv_names | arg_names) & active_taint) and not arg_guarded_inline and not has_path_guard:
+                emit(
+                    line, end_line, "HS-AST-PATH-METHOD", "medium", "CWE-22", "A01:2021",
+                    f"Unguarded path/archive operation `.{node.func.attr}()` on parameter-derived value without traversal check.",
+                )
+
+        # 2. SSRF sinks (CWE-918)
+        elif cname in _AST_SSRF_SINKS and arg_tainted and not arg_guarded_inline and not has_url_guard:
+            emit(
+                line, end_line, "HS-AST-SSRF", "medium", "CWE-918", "A10:2021",
+                f"Unguarded parameter or input reaches outbound request sink `{cname}` without URL host/scheme validation.",
+            )
+
+        # 3. Open Redirect sinks (CWE-601)
+        elif (cname in _AST_REDIRECT_SINKS or leaf in ("HttpResponseRedirect", "RedirectResponse")) and node.args:
+            first_arg = node.args[0]
+            if (
+                ((_names_in(first_arg) & active_taint) or _has_input_source(first_arg))
+                and not _calls_guard(first_arg)
+                and not has_url_guard
+            ):
+                emit(
+                    line, end_line, "HS-AST-REDIRECT", "medium", "CWE-601", "A01:2021",
+                    f"Unguarded parameter or input controls redirect target in `{cname}` without host validation.",
+                )
+
+        # 4. Command injection sinks (CWE-78)
+        elif cname in _AST_CMD_SINKS and arg_tainted and not arg_guarded_inline:
+            emit(
+                line, end_line, "HS-AST-CMDI", "high", "CWE-78", "A03:2021",
+                f"Unguarded parameter or input reaches command execution sink `{cname}`.",
+            )
+
+        # 5. Dynamic code evaluation sinks (CWE-94)
+        elif cname in _AST_CODE_SINKS and arg_tainted and not arg_guarded_inline:
+            emit(
+                line, end_line, "HS-AST-CODE", "high", "CWE-94", "A03:2021",
+                f"Unguarded parameter or input reaches dynamic code execution sink `{cname}`.",
+            )
+
+        # 6. Unsafe deserialization sinks (CWE-502)
+        elif (cname in _AST_DESER_SINKS or cname == "yaml.load") and arg_tainted:
+            if cname == "yaml.load":
+                kws = {kw.arg: (_call_name(kw.value) if kw.value else "") for kw in node.keywords}
+                if "SafeLoader" in kws.get("Loader", ""):
+                    continue
+            emit(
+                line, end_line, "HS-AST-DESER", "high", "CWE-502", "A08:2021",
+                f"Untrusted input reaches unsafe deserialization sink `{cname}`.",
+            )
+
+        # 7. SQL query string interpolation (CWE-89)
+        elif isinstance(node.func, ast.Attribute) and node.func.attr in ("execute", "executemany", "raw") and node.args:
+            q_arg = node.args[0]
+            is_dynamic = isinstance(q_arg, (ast.JoinedStr, ast.BinOp)) or (
+                isinstance(q_arg, ast.Call)
+                and isinstance(q_arg.func, ast.Attribute)
+                and q_arg.func.attr == "format"
+            )
+            if is_dynamic and ((_names_in(q_arg) & active_taint) or _has_input_source(q_arg)):
+                emit(
+                    line, end_line, "HS-AST-SQLI", "high", "CWE-89", "A03:2021",
+                    f"Dynamic SQL query constructed from unguarded parameter in `.{node.func.attr}()`.",
+                )
+
+    return findings
+
+
+def run_ast_sinks(target_path: Path, job_id: str = "standalone") -> list[Finding]:
+    """Deterministic zero-token Python AST sink & guard scanner."""
+    if not ENABLE_AST_SINKS:
+        return []
+    files: list[Path] = []
+    if target_path.is_file():
+        if str(target_path).endswith(".py"):
+            files = [target_path]
+    elif target_path.is_dir():
+        files = sorted(target_path.rglob("*.py"))
+
+    out: list[Finding] = []
+    for p in files:
+        try:
+            source = p.read_text(encoding="utf-8", errors="replace")
+            tree = ast.parse(source, filename=str(p))
+        except (SyntaxError, OSError, ValueError):
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                out.extend(_scan_ast_function(node, str(p), job_id))
+    return out
+
+
+def run_ast_sinks_batch(paths: list[Path], job_id: str = "standalone") -> dict[str, list[Finding]]:
+    out: dict[str, list[Finding]] = {str(Path(p).resolve()): [] for p in paths}
+    if not ENABLE_AST_SINKS:
+        return out
+    for p in paths:
+        resolved = str(Path(p).resolve())
+        out[resolved] = run_ast_sinks(Path(p), job_id=job_id)
+    return out
+
+
+# ─── CodeQL Static Analysis (Python) ────────────────────────────────────────
+
+ENABLE_CODEQL = os.getenv("SAST_ENABLE_CODEQL", "1") not in ("0", "false", "False")
+CODEQL_BIN = os.getenv("CODEQL_BIN", "codeql")
+CODEQL_SUITE = os.getenv(
+    "CODEQL_PYTHON_SUITE",
+    "codeql/python-queries:codeql-suites/python-security-and-quality.qls",
+)
+CODEQL_JOBS = int(os.getenv("CODEQL_JOBS", "2"))
+_CWE_TAG_RE = re.compile(r"external/cwe/cwe-0*(\d+)", re.I)
+
+
+def _resolve_codeql_bin() -> str | None:
+    if not ENABLE_CODEQL:
+        return None
+    found = shutil.which(CODEQL_BIN)
+    if found:
+        return found
+    opt_bin = Path("/opt/codeql/codeql")
+    return str(opt_bin) if opt_bin.is_file() else None
+
+
+def codeql_available() -> bool:
+    """True when CodeQL CLI is enabled and present on PATH or /opt/codeql."""
+    return _resolve_codeql_bin() is not None
+
+
+def _codeql_severity(rule_meta: dict, result_level: str) -> str:
+    props = rule_meta.get("properties") or {}
+    try:
+        sec_sev = float(props.get("security-severity", 0.0))
+        if sec_sev >= 9.0:
+            return "critical"
+        if sec_sev >= 7.0:
+            return "high"
+        if sec_sev >= 4.0:
+            return "medium"
+        if sec_sev > 0.0:
+            return "low"
+    except (TypeError, ValueError):
+        pass
+    prob_sev = str(props.get("problem.severity", "")).lower()
+    if prob_sev == "error" or result_level == "error":
+        return "high"
+    if prob_sev == "warning" or result_level == "warning":
+        return "medium"
+    return "low"
+
+
+def _parse_codeql_sarif(sarif: dict, path_map: dict[str, str], job_id: str) -> list[Finding]:
+    findings: list[Finding] = []
+    for run in sarif.get("runs") or []:
+        rules_by_id: dict[str, dict] = {}
+        driver_rules = ((run.get("tool") or {}).get("driver") or {}).get("rules") or []
+        for r in driver_rules:
+            if r.get("id"):
+                rules_by_id[r["id"]] = r
+        for ext in run.get("tool", {}).get("extensions") or []:
+            for r in ext.get("rules") or []:
+                if r.get("id"):
+                    rules_by_id[r["id"]] = r
+
+        for res in run.get("results") or []:
+            rule_id = res.get("ruleId") or "codeql-python"
+            rule_meta = rules_by_id.get(rule_id) or {}
+            tags = (rule_meta.get("properties") or {}).get("tags") or []
+            cwe_ids = []
+            for t in tags:
+                m = _CWE_TAG_RE.search(str(t))
+                if m:
+                    cwe = f"CWE-{m.group(1)}"
+                    if cwe not in cwe_ids:
+                        cwe_ids.append(cwe)
+
+            severity = _codeql_severity(rule_meta, str(res.get("level") or "warning").lower())
+            msg = ((res.get("message") or {}).get("text") or rule_meta.get("shortDescription", {}).get("text") or rule_id).strip()
+
+            for loc in res.get("locations") or []:
+                phys = loc.get("physicalLocation") or {}
+                uri = ((phys.get("artifactLocation") or {}).get("uri") or "").lstrip("/")
+                region = phys.get("region") or {}
+                start_line = int(region.get("startLine") or 1)
+                end_line = int(region.get("endLine") or start_line)
+                orig_path = path_map.get(uri) or path_map.get(Path(uri).name) or uri
+                if not orig_path:
+                    continue
+                findings.append(
+                    Finding(
+                        job_id=job_id,
+                        file_path=orig_path,
+                        line_start=start_line,
+                        line_end=end_line,
+                        rule_id=rule_id,
+                        tool="codeql",
+                        severity=severity,
+                        message=msg,
+                        cwe_ids=cwe_ids,
+                        code_snippet=_extract_snippet(orig_path, start_line, end_line),
+                    )
+                )
+    return findings
+
+
+def _run_codeql_cmd(targets: list[Path], job_id: str) -> list[Finding] | None:
+    bin_path = _resolve_codeql_bin()
+    if not bin_path:
+        return []
+    py_targets = [Path(t) for t in targets if Path(t).is_dir() or str(t).endswith(".py")]
+    if not py_targets:
+        return []
+
+    timeout = 240 + 20 * max(0, len(py_targets) - 1)
+    with tempfile.TemporaryDirectory(prefix=f"hs_codeql_{job_id}_") as tmp:
+        tmp_root = Path(tmp)
+        src_root = tmp_root / "src"
+        db_dir = tmp_root / "db"
+        sarif_path = tmp_root / "results.sarif"
+        src_root.mkdir(parents=True, exist_ok=True)
+
+        path_map: dict[str, str] = {}
+        for idx, t in enumerate(py_targets):
+            if t.is_file():
+                rel = f"f{idx}_{t.name}"
+                dest = src_root / rel
+                shutil.copy2(t, dest)
+                path_map[rel] = str(t)
+            elif t.is_dir():
+                for sub in t.rglob("*.py"):
+                    rel = f"d{idx}_{sub.relative_to(t).as_posix().replace('/', '_')}"
+                    dest = src_root / rel
+                    shutil.copy2(sub, dest)
+                    path_map[rel] = str(sub)
+
+        if not path_map:
+            return []
+
+        create_cmd = [
+            bin_path, "database", "create", str(db_dir),
+            "--language=python", f"--source-root={src_root}",
+            f"--threads={CODEQL_JOBS}", "--overwrite",
+        ]
+        analyze_cmd = [
+            bin_path, "database", "analyze", str(db_dir), CODEQL_SUITE,
+            "--format=sarif-latest", f"--output={sarif_path}",
+            f"--threads={CODEQL_JOBS}",
+        ]
+        try:
+            c_res = subprocess.run(create_cmd, capture_output=True, text=True, timeout=timeout, errors="replace")
+            if c_res.returncode != 0:
+                logger.warning(f"[{job_id}] CodeQL database create exited {c_res.returncode}: {c_res.stderr[:300]}")
+                return None
+            a_res = subprocess.run(analyze_cmd, capture_output=True, text=True, timeout=timeout, errors="replace")
+            if a_res.returncode != 0 or not sarif_path.is_file():
+                logger.warning(f"[{job_id}] CodeQL analyze exited {a_res.returncode}: {a_res.stderr[:300]}")
+                return None
+            sarif = json.loads(sarif_path.read_text(encoding="utf-8", errors="replace"))
+            return _parse_codeql_sarif(sarif, path_map, job_id)
+        except (subprocess.TimeoutExpired, OSError, json.JSONDecodeError) as e:
+            logger.warning(f"[{job_id}] CodeQL execution failed: {e}")
+            return None
+
+
+def run_codeql(target_path: Path, job_id: str = "standalone") -> list[Finding]:
+    """Run CodeQL Python analysis when the CodeQL CLI is available."""
+    if not codeql_available():
+        return []
+    res = _run_codeql_cmd([target_path], job_id)
+    return res if res is not None else []
+
+
+def run_codeql_batch(paths: list[Path], job_id: str = "standalone") -> dict[str, list[Finding]] | None:
+    """Scan a batch of Python files in a single CodeQL database."""
+    if not codeql_available():
+        return {str(Path(p).resolve()): [] for p in paths}
+    findings = _run_codeql_cmd(paths, job_id)
+    if findings is None:
+        return None
+    out: dict[str, list[Finding]] = {str(Path(p).resolve()): [] for p in paths}
+    for f in findings:
+        out.setdefault(str(Path(f.file_path).resolve()), []).append(f)
+    return out
+
+
 # ─── Orchestrator ────────────────────────────────────────────────────────────
 
 def run_static_analysis(target_path: Path, job_id: str = "standalone") -> list[Finding]:
@@ -334,6 +846,16 @@ def run_static_analysis(target_path: Path, job_id: str = "standalone") -> list[F
     logger.info(f"[{job_id}] Bandit: {len(bandit_findings)} findings")
     findings.extend(bandit_findings)
 
+    ast_findings = run_ast_sinks(target_path, job_id)
+    logger.info(f"[{job_id}] AST sink gate: {len(ast_findings)} findings")
+    findings.extend(ast_findings)
+
+    if codeql_available():
+        codeql_findings = run_codeql(target_path, job_id)
+        logger.info(f"[{job_id}] CodeQL: {len(codeql_findings)} findings")
+        findings.extend(codeql_findings)
+
     logger.info(f"[{job_id}] Total static analysis: {len(findings)} findings")
     return findings
+
 

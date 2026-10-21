@@ -7,6 +7,8 @@ exploitable as written". Every seat therefore sees the complete function with
 all of its static findings, and the Judge rules once per function.
 """
 
+from hackersec.analysis.dedup import has_tool
+from hackersec.analysis.joern.queries import classify_taint_paths
 from hackersec.analysis.llm.prompter import _INJECTION_GUARD, _format_flow
 from hackersec.analysis.schema import Finding
 
@@ -15,9 +17,12 @@ CHARS_PER_TOKEN = 3.2
 # Instructions, schema, and the other seats' arguments, plus room to answer.
 RESERVED_TOKENS = 1900
 MIN_CODE_CHARS = 2500
-MAX_FINDINGS_CHARS = 1800
-MAX_RAG_CHARS = 1000
-ARGUMENT_CHARS = 700
+DEFENDER_CODE_CHARS = 2800
+MAX_FINDINGS_CHARS = 1400
+MAX_RAG_CHARS = 800
+ARGUMENT_CHARS = 550
+
+_SEV_PRIOR = {"critical": 0.90, "high": 0.78, "medium": 0.62, "low": 0.42}
 
 
 def _clip(text, n: int) -> str:
@@ -66,11 +71,83 @@ def _format_taint(f: Finding) -> str:
     cpg = f.cpg_context or {}
     status = cpg.get("cpg_status")
     if status == "success" and cpg.get("taint_paths"):
-        flows = cpg["taint_paths"][:2]
-        return " | ".join(_format_flow(p) for p in flows)
+        unfiltered = cpg.get("unfiltered_taint_paths")
+        sanitized = cpg.get("sanitized_taint_paths")
+        if unfiltered is None and sanitized is None:
+            unfiltered, sanitized = classify_taint_paths(cpg.get("taint_paths") or [])
+        if unfiltered:
+            flows = " | ".join(_format_flow(p) for p in unfiltered[:2])
+            return f"UNFILTERED FLOW (no sanitizer on path): {flows}"
+        if sanitized:
+            flows = " | ".join(_format_flow(p) for p in sanitized[:2])
+            return f"GUARDED/SANITIZED FLOW (passes through validation/sanitizer): {flows}"
+        flows = " | ".join(_format_flow(p) for p in cpg["taint_paths"][:2])
+        return flows
     if status == "no_flow_found":
         return "no direct flow found by Joern (inconclusive: CPG taint does not track self.*, dicts, or decorators)"
     return "no data-flow information"
+
+
+def synthesize_sast_attacker(findings: list[Finding]) -> dict:
+    """
+    Deterministic Challenger brief built directly from SAST + Joern CPG
+    findings. Eliminates the redundant Attacker LLM call while giving the
+    Defender and Judge a concrete, non-hallucinated claim to rebut and weigh.
+    """
+    if not findings:
+        return {
+            "finding_ids": [],
+            "vulnerability": "none",
+            "exploit_path": "none",
+            "preconditions": "none",
+            "exploitability_confidence": 0.0,
+            "status": "success",
+            "source": "sast_cpg",
+        }
+
+    fids = [f"F{i}" for i in range(1, len(findings) + 1)]
+    vuln_parts = []
+    path_parts = []
+    has_unfiltered = False
+    has_sanitized = False
+    tools_seen: set[str] = set()
+
+    for i, f in enumerate(findings[:3], start=1):
+        cwe = ", ".join(f.cwe_ids) if f.cwe_ids else "no CWE"
+        vuln_parts.append(f"[F{i}] {f.tool} {f.rule_id} ({f.severity}, {cwe}) line {f.line_start}: {_clip(f.message, 150)}")
+        path_parts.append(f"[F{i}] line {f.line_start}: {_clip(_format_taint(f), 180)}")
+        cpg = f.cpg_context or {}
+        uf = cpg.get("unfiltered_flows")
+        sf = cpg.get("sanitized_flows")
+        if uf is None and sf is None and cpg.get("taint_paths"):
+            u_list, s_list = classify_taint_paths(cpg["taint_paths"])
+            uf, sf = len(u_list), len(s_list)
+        if (uf or 0) > 0:
+            has_unfiltered = True
+        if (sf or 0) > 0:
+            has_sanitized = True
+        for t in ("semgrep", "bandit", "ast_sink", "codeql"):
+            if has_tool(f, t):
+                tools_seen.add(t)
+
+    base = max((_SEV_PRIOR.get(f.severity, 0.45) for f in findings), default=0.45)
+    if has_unfiltered:
+        base += 0.10
+    elif has_sanitized:
+        base -= 0.12
+    if len(tools_seen) >= 2:
+        base += 0.06
+    conf = round(min(0.98, max(0.20, base)), 4)
+
+    return {
+        "finding_ids": fids,
+        "vulnerability": " | ".join(vuln_parts),
+        "exploit_path": " | ".join(path_parts),
+        "preconditions": "Caller or user-controlled input reaching the flagged sink(s) without neutralization",
+        "exploitability_confidence": conf,
+        "status": "success",
+        "source": "sast_cpg",
+    }
 
 
 def format_findings(findings: list[Finding]) -> str:
@@ -78,8 +155,8 @@ def format_findings(findings: list[Finding]) -> str:
     for i, f in enumerate(findings, start=1):
         cwe = ", ".join(f.cwe_ids) if f.cwe_ids else "no CWE"
         rows.append(
-            f"[F{i}] {f.tool} {f.rule_id} ({f.severity}, {cwe}) at line {f.line_start}: {_clip(f.message, 220)}\n"
-            f"      data flow: {_clip(_format_taint(f), 300)}"
+            f"[F{i}] {f.tool} {f.rule_id} ({f.severity}, {cwe}) at line {f.line_start}: {_clip(f.message, 200)}\n"
+            f"      data flow: {_clip(_format_taint(f), 260)}"
         )
     return _clip("\n".join(rows), MAX_FINDINGS_CHARS)
 
@@ -92,24 +169,26 @@ def format_rag(findings: list[Finding]) -> str:
             if key in seen:
                 continue
             seen.add(key)
-            rows.append(f"- [{key}] {_clip(doc.get('text'), 320)}")
+            rows.append(f"- [{key}] {_clip(doc.get('text'), 260)}")
     return _clip("\n".join(rows), MAX_RAG_CHARS) if rows else "No reference definitions retrieved."
 
 
-def _evidence_packet(function_name: str, code_text: str, findings: list[Finding], context: str = "") -> str:
+def _evidence_packet(
+    function_name: str,
+    code_text: str,
+    findings: list[Finding],
+    context: str = "",
+    include_rag: bool = True,
+) -> str:
     context_block = (
         f"\n===== SAME-FILE CONTEXT (callers and callees; not under review) =====\n{context}\n" if context else ""
     )
+    rag_block = f"\n===== REFERENCE DEFINITIONS (OWASP/CWE) =====\n{format_rag(findings)}\n" if include_rag else ""
     return f"""===== FUNCTION UNDER REVIEW: {function_name} =====
 
-===== CANDIDATE FINDINGS (leads, often false alarms) =====
-Sources: semgrep and bandit, both static rules.
-"data flow" (Joern) only shows that a parameter or input reaches the flagged line; it does not show whether the value is validated, escaped, or passed as a bound parameter.
+===== CANDIDATE FINDINGS (static + Joern CPG leads) =====
 {format_findings(findings)}
-
-===== REFERENCE DEFINITIONS (OWASP/CWE) =====
-{format_rag(findings)}
-{context_block}
+{rag_block}{context_block}
 ===== UNTRUSTED SOURCE CODE (line numbers on the left) =====
 [UNTRUSTED_CODE_START]
 {code_text}
@@ -158,35 +237,38 @@ def _format_evidence_status(evidence: dict | None) -> str:
 
 
 def build_function_defender_prompt(
-    function_name: str, code_text: str, findings: list[Finding], attacker: dict | None = None, context: str = ""
+    function_name: str,
+    code_text: str,
+    findings: list[Finding],
+    attacker: dict | None = None,
+    context: str = "",
+    include_rag: bool = False,
 ) -> str:
     claim_block = ""
     if attacker:
         claim_block = f"""
-===== ATTACKER'S CLAIM =====
+===== CHALLENGER CLAIM (SAST + Joern) =====
 Findings: {attacker.get("finding_ids") or "none named"}
 Vulnerability: {_clip(attacker.get("vulnerability"), ARGUMENT_CHARS)}
 Exploit path: {_clip(attacker.get("exploit_path"), ARGUMENT_CHARS)}
-Preconditions: {_clip(attacker.get("preconditions"), 300)}
 """
     return f"""You are the DEFENDER on an application security review board (Blue Team).
-Argue that the function below is NOT exploitable as written, and rebut the candidate findings.
+Inspect the function below and determine whether the flagged operation is neutralized or safe as written.
 {claim_block}
 Rules:
-1. Look for concrete neutralization in the code: parameterized queries, int()/float() casts, allowlists, validation, escaping, shell=False, safe loaders, framework auto-escaping, or input that is not attacker-controlled at all.
+1. Look for concrete neutralization in the code: parameterized queries, int()/float() casts, allowlists, validation, escaping, shell=False, safe loaders, realpath/abspath+startswith, or input that is not attacker-controlled.
 2. Copy the exact code that neutralizes the input into sanitization_evidence, character for character, without the line-number prefix.
 3. If nothing in the code neutralizes the flagged operation, write "none found" and give a low safety_confidence. Never invent code that is not shown, and do not assume unseen callers validate the input.
-4. Use ONLY the reference definitions for the vulnerability class.
-5. {_INJECTION_GUARD}
-6. Output one JSON object exactly matching this schema:
+4. {_INJECTION_GUARD}
+5. Output one JSON object matching this schema:
    {{
      "sanitization_evidence": "exact code copied from the function, or 'none found'",
-     "mitigating_controls": "Framework, configuration, or call-site controls that reduce risk...",
+     "mitigating_controls": "Controls present in code, or 'none'",
      "rebuttal": "Why the candidate finding is safe, or a concession if it is exploitable...",
      "safety_confidence": 0.0 to 1.0 (float)
    }}
 
-{_evidence_packet(function_name, code_text, findings, context)}
+{_evidence_packet(function_name, code_text, findings, context, include_rag=include_rag)}
 
 Respond with the JSON object only, starting with {{:"""
 
