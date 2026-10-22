@@ -11,7 +11,7 @@ x-ollama: &ollama
   # a system Ollama. Services reach it as http://ollama:11434 on the Compose
   # network. Replicas share the model files in the user's .ollama directory.
   volumes:
-    - ${OLLAMA_HOST_DIR:-./.ollama}:/home/user/.ollama
+    - ${OLLAMA_HOST_DIR:-./.ollama}:${OLLAMA_HOST_DIR:-/home/23ucs586/.ollama}
   runtime: nvidia
   healthcheck:
     test: [ "CMD-SHELL", "ollama list || exit 1" ]
@@ -21,8 +21,8 @@ x-ollama: &ollama
     start_period: 60s
 
 x-ollama-env: &ollama-env
-  HOME: /home/user
-  OLLAMA_MODELS: /home/user/.ollama/models
+  HOME: ${USER_HOME:-/home/23ucs586}
+  OLLAMA_MODELS: ${OLLAMA_HOST_DIR:-/home/23ucs586/.ollama}/models
   NVIDIA_DRIVER_CAPABILITIES: compute,utility
   # Unload weights after 5m of inactivity so idle containers do not lock GPU VRAM
   OLLAMA_KEEP_ALIVE: 5m
