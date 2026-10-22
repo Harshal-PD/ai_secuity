@@ -39,7 +39,12 @@ x-ollama-env: &ollama-env
 
 x-joern: &joern
   image: ghcr.io/joernio/joern:nightly
+  user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
   restart: unless-stopped
+  working_dir: /tmp
+  environment:
+    HOME: /tmp
+    JAVA_TOOL_OPTIONS: "-Duser.home=/tmp"
   command: [ "joern", "--server", "--server-host", "0.0.0.0", "--server-port", "8080" ]
   healthcheck:
     test: [ "CMD-SHELL", "curl -f http://localhost:8080/ || exit 1" ]
@@ -116,32 +121,27 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - joern_data:/tmp/joern
       - app_workspace:/app/workspace
-    working_dir: /app
 
   # A Joern server holds one active project, so parallel evaluation workers
-  # get a second server. It keeps its CPG workspace out of app_workspace.
+  # get a second server. Each container uses its own /tmp for CPG storage.
   joern-2:
     <<: *joern
     profiles: [ "replicas" ]
     volumes:
       - app_workspace:/app/workspace
-    working_dir: /opt/joern-2
 
   joern-3:
     <<: *joern
     profiles: [ "replicas" ]
     volumes:
       - app_workspace:/app/workspace
-    working_dir: /opt/joern-3
 
   joern-4:
     <<: *joern
     profiles: [ "replicas" ]
     volumes:
       - app_workspace:/app/workspace
-    working_dir: /opt/joern-4
 
   # ── FastAPI Backend ────────────────────────────────────────────────────
   backend:
@@ -270,7 +270,7 @@ services:
       - >-
         rm -f /run/nginx.pid /var/run/nginx.pid;
         printf '%s\n'
-        'worker_processes auto;'
+        'worker_processes 2;'
         'error_log stderr notice;'
         'pid /tmp/nginx.pid;'
         'events { worker_connections 1024; }'

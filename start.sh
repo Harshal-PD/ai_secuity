@@ -93,7 +93,7 @@ if [[ "$REPLICAS" -ge 1 ]]; then
     exit 1
   fi
   NVIDIA_VISIBLE_DEVICES="${GPUS[0]}"
-  PARALLEL="${PARALLEL:-4}"
+  PARALLEL="${PARALLEL:-2}"
 elif [[ -n "$EXPLICIT" ]]; then
   NVIDIA_VISIBLE_DEVICES="$EXPLICIT"
   REPLICAS=1
@@ -170,12 +170,9 @@ for ((i = JOERNS + 1; i <= MAX_REPLICAS; i++)); do
   $DC rm -sf "joern-$i" >/dev/null 2>&1 || true
 done
 
-echo "Recreating Ollama (no image rebuild)..."
+echo "Recreating Ollama and Joern (no image rebuild)..."
 # shellcheck disable=SC2086
-$DC up -d --force-recreate $OLLAMA_SERVICES
-# shellcheck disable=SC2086
-$DC up -d $JOERN_SERVICES
-docker compose up -d
+$DC up -d --force-recreate $OLLAMA_SERVICES $JOERN_SERVICES
 
 echo ""
 echo "Done. Confirm every server runs the model on GPU:"
