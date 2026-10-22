@@ -10,9 +10,10 @@
 #   ./eval.sh retry     after completion: re-run samples whose LLM calls failed
 #   ./eval.sh smoke     ~20 min foreground test on 5 ReposVul pairs (separate dirs)
 #
-# Results go to eval_results/$REALWORLD_RUN (default python_v7); the dataset
+# Results go to eval_results/$REALWORLD_RUN (default python_v8); the dataset
 # in workspace/$REALWORLD_DATA (default realworld_python) is built once and
 # shared by every run. Re-score an older run without rebuilding, for example
+#   REALWORLD_DATA=realworld_python REALWORLD_RUN=python_v7 ./eval.sh report
 #   REALWORLD_DATA=realworld_python REALWORLD_RUN=python_v6 ./eval.sh report
 #   REALWORLD_DATA=realworld_reposvul REALWORLD_RUN=reposvul_v5 ./eval.sh report
 #   REALWORLD_DATA=realworld REALWORLD_RUN=realworld_v3 ./eval.sh report
@@ -24,7 +25,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 export REALWORLD_GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-export REALWORLD_RUN="${REALWORLD_RUN:-python_v7}"
+export REALWORLD_RUN="${REALWORLD_RUN:-python_v8}"
 export REALWORLD_DATA="${REALWORLD_DATA:-realworld_python}"
 export REALWORLD_DATASETS="${REALWORLD_DATASETS:-cvefixes,vudenc,reposvul}"
 export REALWORLD_BASELINES="${REALWORLD_BASELINES:-function,context}"

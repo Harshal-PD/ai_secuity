@@ -260,9 +260,10 @@ class AdversarialBoard:
             return res
 
         # 2-seat Challenger -> Defender -> Judge by default: the SAST + Joern
-        # packet is the Challenger claim (0 LLM tokens), the Defender directly
-        # rebuts it on a compact window around the flagged lines, and the Judge
-        # rules on [SAST+Joern Alert + Defender Quote + Automated Quote Check].
+        # packet is the Challenger claim for the Judge (0 Attacker LLM tokens),
+        # while the Defender argues neutralization independently with same-file
+        # context (avoiding Challenger anchoring) and the Judge rules on
+        # [SAST+Joern Alert + Defender Quote + Automated Quote Check].
         if USE_LLM_ATTACKER:
             atk_prompt = build_function_attacker_prompt(function_name, def_code_text, findings, "")
             res_atk = call(atk_prompt, self.model_attacker, TEMP_ATTACKER)
@@ -273,7 +274,7 @@ class AdversarialBoard:
             attacker = synthesize_sast_attacker(findings)
 
         def_prompt = build_function_defender_prompt(
-            function_name, def_code_text, findings, attacker, "", include_rag=False
+            function_name, def_code_text, findings, None, context, include_rag=False
         )
         res_def = call(def_prompt, self.model_defender, TEMP_DEFENDER)
         if res_def["llm_status"] != "success":

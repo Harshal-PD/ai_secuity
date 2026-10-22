@@ -41,28 +41,18 @@ MAX_FLOWS = 5
 
 
 def is_sanitized_flow(flow: list[dict], source_lines: list[str] | None = None) -> bool:
-    """True when any node on `flow` (or an intermediate guard line between the
-    flow's start and sink lines) applies a sanitizer or validation check."""
+    """True when any CPG node along `flow` applies a sanitizer, type-cast, or
+    validation check. Inspects only the actual flow nodes (`f.elements`) so
+    unrelated lines in long functions cannot trigger false sanitizer matches."""
     if not flow:
         return False
-    for node in flow:
+    # Check intermediate and sink nodes on the data-flow path itself (skipping
+    # node 0 when it is the raw parameter declaration).
+    nodes = flow[1:] if len(flow) > 1 else flow
+    for node in nodes:
         code = str((node or {}).get("code") or "")
         if _SANITIZER_FLOW_RE.search(code):
             return True
-
-    if source_lines:
-        lines = [int(n.get("line", -1)) for n in flow if isinstance(n, dict) and int(n.get("line", -1)) > 0]
-        if lines:
-            lo = max(1, min(lines))
-            hi = min(len(source_lines), max(lines))
-            for idx in range(lo - 1, hi):
-                line_text = source_lines[idx]
-                if idx + 1 < hi and _SANITIZER_FLOW_RE.search(line_text):
-                    return True
-                if _GUARD_IF_RE.search(line_text):
-                    window = source_lines[idx : min(hi, idx + 3)]
-                    if any(_EARLY_EXIT_RE.search(w) or "raise " in w or "return " in w for w in window):
-                        return True
     return False
 
 

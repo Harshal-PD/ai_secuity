@@ -247,23 +247,23 @@ def build_function_defender_prompt(
     claim_block = ""
     if attacker:
         claim_block = f"""
-===== CHALLENGER CLAIM (SAST + Joern) =====
+===== ATTACKER'S CLAIM =====
 Findings: {attacker.get("finding_ids") or "none named"}
 Vulnerability: {_clip(attacker.get("vulnerability"), ARGUMENT_CHARS)}
 Exploit path: {_clip(attacker.get("exploit_path"), ARGUMENT_CHARS)}
 """
     return f"""You are the DEFENDER on an application security review board (Blue Team).
-Inspect the function below and determine whether the flagged operation is neutralized or safe as written.
+Argue that the function below is NOT exploitable as written, and rebut the candidate findings.
 {claim_block}
 Rules:
-1. Look for concrete neutralization in the code: parameterized queries, int()/float() casts, allowlists, validation, escaping, shell=False, safe loaders, realpath/abspath+startswith, or input that is not attacker-controlled.
+1. Look for concrete neutralization in the code (or in SAME-FILE CONTEXT): parameterized queries, int()/float() casts, allowlists, validation, escaping, shell=False, safe loaders, realpath/abspath+startswith, framework auto-escaping, or input that is not attacker-controlled at all.
 2. Copy the exact code that neutralizes the input into sanitization_evidence, character for character, without the line-number prefix.
 3. If nothing in the code neutralizes the flagged operation, write "none found" and give a low safety_confidence. Never invent code that is not shown, and do not assume unseen callers validate the input.
 4. {_INJECTION_GUARD}
-5. Output one JSON object matching this schema:
+5. Output one JSON object exactly matching this schema:
    {{
      "sanitization_evidence": "exact code copied from the function, or 'none found'",
-     "mitigating_controls": "Controls present in code, or 'none'",
+     "mitigating_controls": "Framework, configuration, or call-site controls that reduce risk...",
      "rebuttal": "Why the candidate finding is safe, or a concession if it is exploitable...",
      "safety_confidence": 0.0 to 1.0 (float)
    }}

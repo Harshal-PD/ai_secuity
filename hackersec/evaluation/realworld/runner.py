@@ -39,7 +39,7 @@ from hackersec.evaluation.realworld import sast_cache, split, state
 
 logger = logging.getLogger(__name__)
 
-PIPELINE_VERSION = "v7-hybrid-2seat"
+PIPELINE_VERSION = "v8-precision-codeql"
 MIN_FREE_GB = float(os.getenv("REALWORLD_MIN_FREE_GB", "5"))
 USE_CPG = os.getenv("REALWORLD_USE_CPG", "1") not in ("0", "false", "False")
 # function = whole function, no findings; context = that plus same-file callers.

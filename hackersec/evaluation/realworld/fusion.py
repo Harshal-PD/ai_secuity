@@ -25,15 +25,13 @@ logger = logging.getLogger(__name__)
 
 _BASE = [
     "p_vulnerable",
-    "attacker_confidence",
     "defender_safety",
     "evidence_grounded",
-    "log_findings",
-    "max_severity",
-    "unfiltered_taint",
-    "sanitized_taint",
-    "both_tools_flagged",
+    "static_strength",
 ]
+# Expected direction of each feature on P(vulnerable): +1 increases risk, -1 decreases risk.
+# Clamping inverted small-sample weights to 0 prevents noisy dev folds from flipping a safety signal.
+_BASE_SIGNS = (+1, -1, -1, +1)
 FEATURES = _BASE
 FULL_FEATURES = _BASE + ["has_sast", "has_llm_taint", "has_auditor", "auditor_confidence", "auditor_p_vulnerable"]
 KINDS = {"board": FEATURES, "full": FULL_FEATURES}
@@ -47,8 +45,9 @@ MIN_TRAIN = 20
 # vulnerable and one fixed function, so F1 is maximised by flagging
 # everything (0.667); MCC and balanced accuracy are 0 for that.
 CALIBRATION_METRIC = os.getenv("REALWORLD_CALIBRATE_METRIC", "mcc").strip().lower()
-if CALIBRATION_METRIC not in ("mcc", "balanced_accuracy", "f1"):
-    raise ValueError(f"REALWORLD_CALIBRATE_METRIC must be mcc, balanced_accuracy or f1, got {CALIBRATION_METRIC!r}")
+if CALIBRATION_METRIC not in ("mcc", "balanced_accuracy", "f1", "f0.5"):
+    raise ValueError(f"REALWORLD_CALIBRATE_METRIC must be mcc, balanced_accuracy, f1 or f0.5, got {CALIBRATION_METRIC!r}")
+FUSION_MIN_PRECISION = float(os.getenv("REALWORLD_FUSION_MIN_PRECISION", "0.72"))
 _SEVERITY = {"critical": 1.0, "high": 0.75, "medium": 0.5, "low": 0.25}
 
 
@@ -57,17 +56,6 @@ def _num(value, default: float) -> float:
         return float(value) if value is not None else default
     except (TypeError, ValueError):
         return default
-
-
-def _taint_split(findings: list[dict]) -> tuple[float, float]:
-    """Return `(unfiltered_taint, sanitized_taint)` for a function's findings."""
-    if any("unfiltered_flows" in f or "sanitized_flows" in f for f in findings):
-        unfiltered = 1.0 if any((f.get("unfiltered_flows") or 0) > 0 for f in findings) else 0.0
-        sanitized = 1.0 if any((f.get("sanitized_flows") or 0) > 0 for f in findings) else 0.0
-        return unfiltered, sanitized
-    # Backward-compatible fallback for older checkpoints that only stored taint_paths count.
-    any_flow = 1.0 if any((f.get("taint_paths") or 0) > 0 for f in findings) else 0.0
-    return any_flow, 0.0
 
 
 def features(record: dict, kind: str = "board") -> list[float] | None:
@@ -88,17 +76,14 @@ def features(record: dict, kind: str = "board") -> list[float] | None:
         f.get("tool") == "codeql" or f.get("also_codeql") for f in findings
     )
     tool_count = int(has_semgrep) + int(has_bandit) + int(has_ast) + int(has_codeql)
-    unfiltered_taint, sanitized_taint = _taint_split(findings)
+    max_sev = max(_SEVERITY.get(f.get("severity"), 0.0) for f in findings)
+    multi_tool = 1.0 if tool_count >= 2 else 0.0
+    static_strength = 0.5 * max_sev + 0.5 * multi_tool
     x = [
         _num(record.get(p_key), 0.5),
-        _num(board.get("attacker_confidence"), 0.5),
         _num(board.get("defender_safety"), 0.5),
         1.0 if board.get("evidence_grounded") else 0.0,
-        math.log1p(len(findings)),
-        max(_SEVERITY.get(f.get("severity"), 0.0) for f in findings),
-        unfiltered_taint,
-        sanitized_taint,
-        1.0 if tool_count >= 2 else 0.0,
+        static_strength,
     ]
     if kind == "full":
         n = record.get("n_candidates") or {}
@@ -116,10 +101,12 @@ def features(record: dict, kind: str = "board") -> list[float] | None:
 
 
 def metric(tp: int, fp: int, fn: int, tn: int, name: str = "") -> float:
-    """f1, mcc (Matthews correlation) or balanced_accuracy from counts."""
+    """f1, f0.5, mcc (Matthews correlation) or balanced_accuracy from counts."""
     name = name or CALIBRATION_METRIC
     if name == "f1":
         return 2 * tp / (2 * tp + fp + fn) if tp else 0.0
+    if name == "f0.5":
+        return 1.25 * tp / (1.25 * tp + 0.25 * fn + fp) if tp else 0.0
     if name == "balanced_accuracy":
         tpr = tp / (tp + fn) if tp + fn else 0.0
         tnr = tn / (tn + fp) if tn + fp else 0.0
@@ -128,22 +115,32 @@ def metric(tp: int, fp: int, fn: int, tn: int, name: str = "") -> float:
     return (tp * tn - fp * fn) / denom if denom else 0.0
 
 
-def best_threshold(scores: list[float | None], labels: list[int]) -> float | None:
+def best_threshold(scores: list[float | None], labels: list[int], min_precision: float = 0.0) -> float | None:
     """Threshold on the scores that maximises CALIBRATION_METRIC over every
-    function in the split; ties keep the stricter threshold. A None score
-    (nothing flagged) is always predicted safe."""
+    function in the split; ties keep the stricter threshold. When
+    `min_precision > 0`, prefers thresholds achieving at least `min_precision`
+    (with >= 10% recall on flagged positives) if any such threshold has
+    positive discrimination."""
     candidates = sorted({s for s in scores if s is not None}, reverse=True)
     if not candidates:
         return None
+    flagged_pos = sum(1 for s, y in zip(scores, labels) if s is not None and y == 1)
+    min_tp = max(3, int(0.15 * flagged_pos))
     best, best_value = None, -math.inf
+    best_hp, best_hp_value = None, -math.inf
     for t in candidates:
         tp = sum(1 for s, y in zip(scores, labels) if s is not None and s >= t and y == 1)
         fp = sum(1 for s, y in zip(scores, labels) if s is not None and s >= t and y == 0)
         fn = sum(1 for s, y in zip(scores, labels) if (s is None or s < t) and y == 1)
         tn = sum(1 for s, y in zip(scores, labels) if (s is None or s < t) and y == 0)
         value = metric(tp, fp, fn, tn)
+        prec = tp / (tp + fp) if (tp + fp) else 0.0
         if value > best_value + 1e-12:
             best, best_value = t, value
+        if min_precision > 0 and prec >= min_precision and tp >= min_tp and value > best_hp_value + 1e-12:
+            best_hp, best_hp_value = t, value
+    if best_hp is not None and best_hp_value >= 0.85 * best_value and best_hp_value > 0:
+        return best_hp
     return best
 
 
@@ -216,7 +213,7 @@ def train(dev_records: list[dict], kind: str = "board") -> tuple[Fusion | None, 
     def eval_scores(flagged_scores: list[float]) -> tuple[float, float | None, list[float | None]]:
         it = iter(flagged_scores)
         full = [next(it) if x is not None else None for x, _ in rows]
-        t = best_threshold(full, all_labels)
+        t = best_threshold(full, all_labels, min_precision=FUSION_MIN_PRECISION)
         if t is None:
             return -math.inf, None, full
         tp = sum(1 for s, yy in zip(full, all_labels) if s is not None and s >= t and yy)
@@ -235,6 +232,19 @@ def train(dev_records: list[dict], kind: str = "board") -> tuple[Fusion | None, 
     model = pipeline(best_c).fit(X, y)
     scaler, lr = model[0], model[1]
     coef, intercept = lr.coef_[0].copy(), float(lr.intercept_[0])
+    # Clamp any feature weight that flipped against its domain sign on a small dev fold.
+    for idx, sign in enumerate(_BASE_SIGNS):
+        if idx < len(coef) and coef[idx] * sign < 0:
+            coef[idx] = 0.0
+    # Re-tune the decision threshold on the sign-constrained logits so test
+    # scores and the threshold are on the exact same scale.
+    constrained_probs = [
+        float(1.0 / (1.0 + math.exp(-(float(((np.asarray(x) - scaler.mean_) / scaler.scale_) @ coef) + intercept))))
+        for x, _ in flagged
+    ]
+    c_val_score, c_t, c_full = eval_scores(constrained_probs)
+    if c_t is not None:
+        threshold, all_scores = c_t, c_full
 
     # Guard against small-sample overfitting: if out-of-fold CV on dev is
     # worse than raw p_vulnerable alone, fall back to the p_vulnerable axis.

@@ -9,9 +9,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Optional CodeQL CLI bundle installation (pass --build-arg INSTALL_CODEQL=1
-# or mount a host bundle at /opt/codeql).
-ARG INSTALL_CODEQL=0
+# CodeQL CLI bundle installation (enabled by default; pass --build-arg INSTALL_CODEQL=0 to skip).
+ARG INSTALL_CODEQL=1
 RUN if [ "$INSTALL_CODEQL" = "1" ]; then \
       mkdir -p /opt && \
       curl -fsSL https://github.com/github/codeql-action/releases/latest/download/codeql-bundle-linux64.tar.gz \

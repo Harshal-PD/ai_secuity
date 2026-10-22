@@ -117,7 +117,7 @@ def _semgrep_configs() -> list[str]:
 def rules_signature() -> str:
     """Identifies the exact rule set, so cached scan results are reused only
     while the rules are unchanged."""
-    h = hashlib.sha1(b"v7-2seat-sast-ast-codeql")
+    h = hashlib.sha1(b"v7.1-precision-ast-low-codeql")
     for cfg in _semgrep_configs():
         p = Path(cfg)
         h.update(p.read_bytes() if p.is_file() else cfg.encode())
@@ -496,6 +496,8 @@ def _scan_ast_function(
                             tainted.add(t)
 
     active_taint = tainted - guarded_vars
+    has_explicit_source = _has_input_source(fn)
+    heuristic_sev = "medium" if has_explicit_source else "low"
     findings: list[Finding] = []
     seen_lines: set[tuple[int, str]] = set()
 
@@ -535,28 +537,28 @@ def _scan_ast_function(
         # 1. Path traversal sinks (CWE-22)
         if (cname in _AST_PATH_SINKS or leaf in ("send_file", "send_from_directory")) and arg_tainted and not arg_guarded_inline and not has_path_guard:
             emit(
-                line, end_line, "HS-AST-PATH", "medium", "CWE-22", "A01:2021",
+                line, end_line, "HS-AST-PATH", heuristic_sev, "CWE-22", "A01:2021",
                 f"Unguarded parameter or input reaches file/path sink `{cname}` without path normalization or prefix validation.",
             )
         elif cname in ("os.path.join", "posixpath.join", "ntpath.join") and len(node.args) >= 2:
             tail_names = set().union(*(_names_in(a) for a in node.args[1:]))
             if ((tail_names & active_taint) or any(_has_input_source(a) for a in node.args[1:])) and not arg_guarded_inline and not has_path_guard:
                 emit(
-                    line, end_line, "HS-AST-PATH-JOIN", "medium", "CWE-22", "A01:2021",
+                    line, end_line, "HS-AST-PATH-JOIN", heuristic_sev, "CWE-22", "A01:2021",
                     f"Unguarded parameter joined into path via `{cname}` without `realpath`/`abspath` + `startswith` or `safe_join` check.",
                 )
         elif isinstance(node.func, ast.Attribute) and node.func.attr in _AST_PATH_METHODS:
             recv_names = _names_in(node.func.value)
             if ((recv_names | arg_names) & active_taint) and not arg_guarded_inline and not has_path_guard:
                 emit(
-                    line, end_line, "HS-AST-PATH-METHOD", "medium", "CWE-22", "A01:2021",
+                    line, end_line, "HS-AST-PATH-METHOD", heuristic_sev, "CWE-22", "A01:2021",
                     f"Unguarded path/archive operation `.{node.func.attr}()` on parameter-derived value without traversal check.",
                 )
 
         # 2. SSRF sinks (CWE-918)
         elif cname in _AST_SSRF_SINKS and arg_tainted and not arg_guarded_inline and not has_url_guard:
             emit(
-                line, end_line, "HS-AST-SSRF", "medium", "CWE-918", "A10:2021",
+                line, end_line, "HS-AST-SSRF", heuristic_sev, "CWE-918", "A10:2021",
                 f"Unguarded parameter or input reaches outbound request sink `{cname}` without URL host/scheme validation.",
             )
 
@@ -569,7 +571,7 @@ def _scan_ast_function(
                 and not has_url_guard
             ):
                 emit(
-                    line, end_line, "HS-AST-REDIRECT", "medium", "CWE-601", "A01:2021",
+                    line, end_line, "HS-AST-REDIRECT", heuristic_sev, "CWE-601", "A01:2021",
                     f"Unguarded parameter or input controls redirect target in `{cname}` without host validation.",
                 )
 
@@ -655,7 +657,7 @@ ENABLE_CODEQL = os.getenv("SAST_ENABLE_CODEQL", "1") not in ("0", "false", "Fals
 CODEQL_BIN = os.getenv("CODEQL_BIN", "codeql")
 CODEQL_SUITE = os.getenv(
     "CODEQL_PYTHON_SUITE",
-    "codeql/python-queries:codeql-suites/python-security-and-quality.qls",
+    "codeql/python-queries:codeql-suites/python-security-extended.qls",
 )
 CODEQL_JOBS = int(os.getenv("CODEQL_JOBS", "2"))
 _CWE_TAG_RE = re.compile(r"external/cwe/cwe-0*(\d+)", re.I)
@@ -722,6 +724,8 @@ def _parse_codeql_sarif(sarif: dict, path_map: dict[str, str], job_id: str) -> l
                     cwe = f"CWE-{m.group(1)}"
                     if cwe not in cwe_ids:
                         cwe_ids.append(cwe)
+            if not cwe_ids:
+                continue  # Ignore non-security CodeQL quality/lint rules
 
             severity = _codeql_severity(rule_meta, str(res.get("level") or "warning").lower())
             msg = ((res.get("message") or {}).get("text") or rule_meta.get("shortDescription", {}).get("text") or rule_id).strip()
