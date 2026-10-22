@@ -36,8 +36,9 @@ COPY test_vuln.py .
 # Copy pre-built data files (FAISS index, ML model, KB metadata)
 COPY data/ data/
 
-# Ensure upload directory exists
-RUN mkdir -p workspace data/uploads
+# Ensure upload, workspace, and non-root cache directories exist and are writable by any UID
+RUN mkdir -p workspace data/uploads db_data /cache/huggingface /tmp/hs_home \
+    && chmod -R 0777 workspace data db_data /cache/huggingface /tmp/hs_home
 
 # Default: run FastAPI (override in docker-compose for worker)
 CMD ["uvicorn", "hackersec.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -135,6 +135,10 @@ for ((i = 2; i <= JOERNS; i++)); do
 done
 
 touch .env
+mkdir -p "${HOME}/.ollama/models"
+set_env HOST_UID "$(id -u)"
+set_env HOST_GID "$(id -g)"
+set_env OLLAMA_HOST_DIR "${HOME}/.ollama"
 set_env NVIDIA_VISIBLE_DEVICES "$NVIDIA_VISIBLE_DEVICES"
 for ((i = 2; i <= REPLICAS; i++)); do
   set_env "OLLAMA_GPU_$i" "${GPUS[$((i - 1))]}"

@@ -29,6 +29,10 @@ export REALWORLD_RUN="${REALWORLD_RUN:-python_v8}"
 export REALWORLD_DATA="${REALWORLD_DATA:-realworld_python}"
 export REALWORLD_DATASETS="${REALWORLD_DATASETS:-cvefixes,vudenc,reposvul}"
 export REALWORLD_BASELINES="${REALWORLD_BASELINES:-function,context}"
+export HOST_UID="${HOST_UID:-$(id -u)}"
+export HOST_GID="${HOST_GID:-$(id -g)}"
+export OLLAMA_HOST_DIR="${OLLAMA_HOST_DIR:-${HOME}/.ollama}"
+mkdir -p "$OLLAMA_HOST_DIR/models"
 DC="docker compose --profile eval --profile replicas"
 M="python -m hackersec.evaluation.realworld"
 RESULTS="eval_results/$REALWORLD_RUN"
@@ -106,8 +110,8 @@ case "${1:-status}" in
     echo "Markdown: $RESULTS/report_latest.md"
     ;;
   stop)
-    $DC stop eval
-    echo "Stopped. Progress is saved; ./eval.sh start resumes."
+    $DC stop eval $SERVERS
+    echo "Stopped eval, Ollama, and Joern (GPUs released). Progress is saved; ./eval.sh start resumes."
     ;;
   retry)
     running || { echo "Start the container first: ./eval.sh start"; exit 1; }
