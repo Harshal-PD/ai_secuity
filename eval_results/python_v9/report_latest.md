@@ -1,4 +1,4 @@
-# HackerSec real-world evaluation (2026-10-23T23:26:08)
+# HackerSec real-world evaluation (2026-10-23T23:46:01)
 
 Status: **complete** — 2506/2506 samples evaluated (100.0%), 0 LLM failures, 0 errors. Pipeline: `v9-judge-repo-callers`.
 
