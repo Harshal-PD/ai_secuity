@@ -1,4 +1,4 @@
-# HackerSec real-world evaluation (2026-10-23T20:01:50)
+# HackerSec real-world evaluation (2026-10-23T20:57:44)
 
 Status: **complete** — 2506/2506 samples evaluated (100.0%), 0 LLM failures, 0 errors. Pipeline: `v8-precision-codeql`.
 
