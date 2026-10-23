@@ -2,8 +2,8 @@
 Single-prompt review of one function, with no static findings.
 
 This is the comparison baseline for the SAST-gated board: the same model,
-asked once whether the function is exploitable. A second call can include
-same-file callers and callees. Neither call is part of the shipped pipeline;
+asked once whether the function is exploitable. A second call includes the
+same context the board sees. Neither call is part of the shipped pipeline;
 the evaluation records them so accuracy and tokens can be compared.
 """
 
@@ -16,7 +16,8 @@ MAX_TOKENS = 400
 
 def build_prompt(function_name: str, code_text: str, context: str = "") -> str:
     context_block = (
-        f"\n===== SAME-FILE CONTEXT (callers and callees; not under review) =====\n{context}\n" if context else ""
+        f"\n===== CONTEXT (callers and callees from this file and the repository; not under review) =====\n"
+        f"{context}\n" if context else ""
     )
     return f"""You are a security reviewer. Decide whether the Python function below, AS WRITTEN, contains an exploitable security vulnerability.
 

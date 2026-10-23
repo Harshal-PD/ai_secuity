@@ -24,6 +24,7 @@ from hackersec.analysis.llm.parser import (
     parse_llm_response,
     parse_vote_response,
 )
+from hackersec.analysis.llm.context import context_code
 from hackersec.analysis.llm.evidence import check_sanitizer_evidence
 from hackersec.analysis.llm.function_prompter import (
     DEFENDER_CODE_CHARS,
@@ -230,8 +231,10 @@ class AdversarialBoard:
         vote. `p_vulnerable` is the mean of the votes' P(vulnerable), and
         `prediction` is the majority vote
         (after the evidence rule, when that is set to override). `context`
-        (same-file callers and callees) is shown to every seat and takes its
-        room from the code budget.
+        (callers and callees from this file and the repository) is shown to
+        every seat and takes its room from the code budget; a Defender quote
+        found there instead of in the function counts as grounded, with
+        location "context".
         """
         votes = votes or JUDGE_VOTES
         mode = (evidence_mode or EVIDENCE_MODE).lower()
@@ -261,7 +264,7 @@ class AdversarialBoard:
 
         # 2-seat Challenger -> Defender -> Judge by default: the SAST + Joern
         # packet is the Challenger claim for the Judge (0 Attacker LLM tokens),
-        # while the Defender argues neutralization independently with same-file
+        # while the Defender argues neutralization independently with caller
         # context (avoiding Challenger anchoring) and the Judge rules on
         # [SAST+Joern Alert + Defender Quote + Automated Quote Check].
         if USE_LLM_ATTACKER:
@@ -282,6 +285,12 @@ class AdversarialBoard:
         defender = parse_defender_response(res_def["response"])
 
         evidence = check_sanitizer_evidence(code, defender.get("sanitization_evidence"))
+        if evidence["reason"] == "no_span_match" and context:
+            # A caller's validation is a real defence too, but only if it is
+            # verbatim in the context the Defender was shown.
+            in_context = check_sanitizer_evidence(context_code(context), defender.get("sanitization_evidence"))
+            if in_context["grounded"]:
+                evidence = {**in_context, "location": "context"}
 
         judge_prompt = build_function_judge_prompt(
             function_name, code_text, findings, attacker, defender, context, evidence=evidence

@@ -181,7 +181,8 @@ def _evidence_packet(
     include_rag: bool = True,
 ) -> str:
     context_block = (
-        f"\n===== SAME-FILE CONTEXT (callers and callees; not under review) =====\n{context}\n" if context else ""
+        f"\n===== CONTEXT (callers and callees from this file and the repository; not under review) =====\n"
+        f"{context}\n" if context else ""
     )
     rag_block = f"\n===== REFERENCE DEFINITIONS (OWASP/CWE) =====\n{format_rag(findings)}\n" if include_rag else ""
     return f"""===== FUNCTION UNDER REVIEW: {function_name} =====
@@ -222,6 +223,13 @@ Respond with the JSON object only, starting with {{:"""
 def _format_evidence_status(evidence: dict | None) -> str:
     if not evidence:
         return ""
+    if evidence.get("grounded") and evidence.get("location") == "context":
+        span = _clip(evidence.get("matched_span"), 80)
+        return (
+            f"\nAutomated quote check: VERIFIED IN CONTEXT (matched span `{span}`) — the Defender's quote is in "
+            "caller or callee code shown under CONTEXT, not in the function itself; check whether it guards every "
+            "path that reaches the flagged operation."
+        )
     if evidence.get("grounded"):
         span = _clip(evidence.get("matched_span"), 80)
         return (
@@ -256,9 +264,9 @@ Exploit path: {_clip(attacker.get("exploit_path"), ARGUMENT_CHARS)}
 Argue that the function below is NOT exploitable as written, and rebut the candidate findings.
 {claim_block}
 Rules:
-1. Look for concrete neutralization in the code (or in SAME-FILE CONTEXT): parameterized queries, int()/float() casts, allowlists, validation, escaping, shell=False, safe loaders, realpath/abspath+startswith, framework auto-escaping, or input that is not attacker-controlled at all.
+1. Look for concrete neutralization in the code (or in its callers shown under CONTEXT): parameterized queries, int()/float() casts, allowlists, validation, escaping, shell=False, safe loaders, realpath/abspath+startswith, framework auto-escaping, or input that is not attacker-controlled at all.
 2. Copy the exact code that neutralizes the input into sanitization_evidence, character for character, without the line-number prefix.
-3. If nothing in the code neutralizes the flagged operation, write "none found" and give a low safety_confidence. Never invent code that is not shown, and do not assume unseen callers validate the input.
+3. If nothing in the code neutralizes the flagged operation, write "none found" and give a low safety_confidence. Never invent code that is not shown, and do not assume that callers not shown under CONTEXT validate the input.
 4. {_INJECTION_GUARD}
 5. Output one JSON object exactly matching this schema:
    {{
@@ -300,7 +308,7 @@ Self-reported safety: {defender.get("safety_confidence", "unstated")}
 Rules:
 1. Decide from the code itself. The arguments are aids; neither side's rhetoric or confidence numbers decide the case.
 2. Candidate findings are frequently false alarms. A finding makes the function vulnerable if input an attacker can influence (a function parameter, request/CLI/file/env data, or state controlled by a caller) can reach the flagged operation without being neutralized.
-3. A defence counts only if the neutralizing code is really present in the function shown (or in SAME-FILE CONTEXT) and verified by the Automated quote check above. Do NOT assume that unseen callers validate or sanitize arguments before calling this function.
+3. A defence counts only if the neutralizing code is really present in the function shown (or in a caller shown under CONTEXT) and verified by the Automated quote check above. Do NOT assume that callers not shown validate or sanitize arguments before calling this function.
 4. If Joern data flow says no direct flow was found, treat that as inconclusive rather than proof of safety: static CPG taint misses flows through object attributes (self.*), dicts, callbacks, and decorators.
 5. Report calibrated confidence in your verdict: 0.5 means genuinely unsure, 0.9 means you would bet heavily. Do not inflate it.
 6. Use ONLY the reference definitions for the vulnerability class. Never cite a CWE or CVE from memory.

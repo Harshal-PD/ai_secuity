@@ -214,7 +214,7 @@ services:
       - REALWORLD_DIR=/app/workspace/${REALWORLD_DATA:-realworld_python}
       # One directory per run, so a new pipeline version never mixes with
       # (or resumes from) an older run's checkpoints.
-      - REALWORLD_RESULTS_DIR=/app/eval_results/${REALWORLD_RUN:-python_v8}
+      - REALWORLD_RESULTS_DIR=/app/eval_results/${REALWORLD_RUN:-python_v9}
       - SEMGREP_RULES_DIR=/app/workspace/${REALWORLD_DATA:-realworld_python}/semgrep_rules
       - REALWORLD_DATASETS=${REALWORLD_DATASETS:-cvefixes,vudenc,reposvul}
       - REALWORLD_TARGET_REPOSVUL=${REALWORLD_TARGET_REPOSVUL:-1000}
@@ -229,7 +229,7 @@ services:
       - JOERN_BASE_URLS=${JOERN_BASE_URLS:-http://joern:8080}
       - REALWORLD_WORKERS=${REALWORLD_WORKERS:-1}
       # Comparison baselines, not part of the shipped SAST board.
-      # function = whole function, no findings; context = plus same-file callers.
+      # function = whole function, no findings; context = plus the board's context.
       # 0 disables both.
       - REALWORLD_BASELINES=${REALWORLD_BASELINES:-function,context}
     depends_on:

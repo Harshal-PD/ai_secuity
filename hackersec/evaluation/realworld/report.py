@@ -52,8 +52,7 @@ SYSTEM_LABELS = {
     "board": "SAST board: Judge vote",
     "board_override": "SAST board + evidence override (ablation)",
     "board_calibrated": "SAST board: vote score, dev-tuned threshold",
-    "fusion": "SAST board + fusion (trained on dev)",
-    "cascade": "SAST board + fusion + context cascade (trained on dev)",
+    "fusion": "SAST board + fusion (ablation, trained on dev)",
     "llm_only": "LLM only, whole function, no SAST",
     "llm_only_calibrated": "LLM only, dev-tuned threshold",
     "llm_context": "LLM only + same-file context, no SAST",
@@ -80,7 +79,6 @@ SYSTEM_KEYS = {
     "board_override": ("board_override_pred", None),
     "board_calibrated": ("board_calibrated_pred", "p_score"),
     "fusion": ("fusion_pred", "fusion_score"),
-    "cascade": ("cascade_pred", "cascade_score"),
     "llm_only": ("llm_only_pred", "llm_only_p"),
     "llm_only_calibrated": ("llm_only_calibrated_pred", "llm_only_p"),
     "llm_context": ("llm_context_pred", "llm_context_p"),
@@ -95,9 +93,9 @@ SYSTEM_KEYS = {
     "full_guard": ("full_guard_pred", None),
     "fusion_v1": ("fusion_v1_pred", None),
 }
-HEADLINE_ORDER = ("fusion", "cascade", "board_calibrated", "board", "full_fusion", "full_calibrated", "full_board")
+HEADLINE_ORDER = ("board", "board_calibrated", "fusion", "full_board", "full_calibrated", "full_fusion")
 # Columns of the family table, which would be unreadable with every system.
-FAMILY_SYSTEMS = ("sast", "semgrep", "bandit", "board_calibrated", "fusion", "cascade", "llm_only_calibrated", "llm_context_calibrated")
+FAMILY_SYSTEMS = ("sast", "semgrep", "bandit", "board", "board_calibrated", "fusion", "llm_only_calibrated", "llm_context_calibrated")
 # LLM calls that produce each system's verdict. Calibrated rows share the calls.
 COST_BUCKET = {
     "board": "board", "board_override": "board", "board_calibrated": "board", "fusion": "board",
@@ -205,38 +203,6 @@ def _calibrate(rows: list[dict]) -> dict:
             if t is not None:
                 for r in rows:
                     r[pred_key] = int(r[score_key] is not None and r[score_key] >= t)
-
-    # Two-stage cascade: SAST-flagged functions use the dev-fitted Fusion
-    # model; SAST-unflagged functions open a high-confidence secondary screen
-    # on `llm_context_p` tuned on dev to maximise CALIBRATION_METRIC.
-    if model is not None and rows and all("llm_context_p" in r for r in rows) and dev:
-        unflagged_cands = sorted(
-            {float(r["llm_context_p"]) for r in dev if not r["flagged"] and r.get("llm_context_p") is not None and float(r["llm_context_p"]) >= 0.85},
-            reverse=True,
-        )
-        best_t, best_val = None, -math.inf
-        for t_unf in unflagged_cands:
-            preds = [
-                r["fusion_pred"] if r["flagged"] else int(r.get("llm_context_p") is not None and float(r["llm_context_p"]) >= t_unf)
-                for r in dev
-            ]
-            tp = sum(1 for p, y in zip(preds, labels) if p == 1 and y == 1)
-            fp = sum(1 for p, y in zip(preds, labels) if p == 1 and y == 0)
-            fn = sum(1 for p, y in zip(preds, labels) if p == 0 and y == 1)
-            tn = sum(1 for p, y in zip(preds, labels) if p == 0 and y == 0)
-            val = fusion.metric(tp, fp, fn, tn)
-            if val > best_val + 1e-12:
-                best_val, best_t = val, t_unf
-        if best_t is not None:
-            out["cascade_unflagged_threshold"] = best_t
-            for r in rows:
-                ctx_p = float(r["llm_context_p"]) if r.get("llm_context_p") is not None else 0.0
-                if r["flagged"] and r.get("fusion_score") is not None:
-                    r["cascade_score"] = round(0.5 + 0.5 * float(r["fusion_score"]), 4)
-                    r["cascade_pred"] = int(r["fusion_pred"])
-                else:
-                    r["cascade_score"] = round(0.5 * ctx_p, 4)
-                    r["cascade_pred"] = int(ctx_p >= best_t)
     return out
 
 
@@ -518,6 +484,20 @@ def _telemetry(rows: list[dict]) -> dict:
         if full:
             out["candidates_board"] = _board_telemetry(full, "full_board", "full_pred", "full_override_pred")
 
+    with_repo = [r for r in rows if isinstance(r.get("repo_context"), dict)]
+    if with_repo:
+        out["repo_context"] = {
+            "functions": len(with_repo),
+            "available_rate": _rate(with_repo, lambda r: r["repo_context"].get("status") == "ok"),
+            "cross_file_callers_rate": _rate(with_repo, lambda r: (r["repo_context"].get("call_sites") or 0) > 0),
+            "entry_point_rate": _rate(with_repo, lambda r: bool(r["repo_context"].get("entry_point"))),
+            "flagged_cross_file_callers_rate": _rate(
+                [r for r in with_repo if r["flagged"]], lambda r: (r["repo_context"].get("call_sites") or 0) > 0),
+            "flagged_entry_point_rate": _rate(
+                [r for r in with_repo if r["flagged"]], lambda r: bool(r["repo_context"].get("entry_point"))),
+            "mean_context_chars": round(sum(r.get("context_chars") or 0 for r in with_repo) / len(with_repo), 1),
+        }
+
     baselines = {}
     for key in ("llm_only", "llm_context"):
         reviewed = [r for r in rows if isinstance(r.get(key), dict)]
@@ -549,6 +529,7 @@ def _board_telemetry(rows: list[dict], board_key: str, pred_key: str, override_k
         "evidence_grounded_rate": _rate(boards, lambda r: r[board_key].get("evidence_grounded") is True),
         "evidence_reasons": dict(sorted(Counter(r[board_key].get("evidence_reason") or "unknown"
                                                 for r in boards).items())),
+        "evidence_in_context_rate": _rate(boards, lambda r: r[board_key].get("evidence_location") == "context"),
         "guard_grounded_rate": _rate(boards, lambda r: r[board_key].get("guard_grounded") is True),
         "override_flip_rate": _rate(boards, lambda r: r.get(override_key) != r[pred_key]),
         "code_truncated_rate": _rate(boards, lambda r: bool(r[board_key].get("code_truncated"))),
@@ -866,9 +847,6 @@ def _markdown(report: dict) -> str:
     if cal.get("llm_context_threshold") is not None:
         L.append(f"- LLM-only + context threshold on P(vulnerable): **{cal['llm_context_threshold']:.3f}** "
                  f"(max {objective} on dev)")
-    if cal.get("cascade_unflagged_threshold") is not None:
-        L.append(f"- Cascade unflagged context threshold on P(vulnerable): "
-                 f"**{cal['cascade_unflagged_threshold']:.3f}** (max {objective} on dev)")
     L += ["", "Each pair contributes one vulnerable and one fixed function, so flagging every function scores "
           "F1 0.667, accuracy 0.5 and MCC 0 (the trivial reference row). MCC, accuracy and the pairwise "
           "columns show whether a system actually separates vulnerable from fixed code.", ""]
@@ -904,6 +882,15 @@ def _markdown(report: dict) -> str:
               "ReposVul's strict label requires Semgrep or RATS to flag the pre-fix file at the changed lines. "
               "SAST is favoured by construction where that check matched; the other stratum shows how each "
               "system does on fixes that pattern rules did not see.", ""]
+        for name, v in strata.items():
+            L += [f"### {name} — {v['samples']} functions, {v['pairs']} pairs", ""] + _md_signal(v, systems) + [""]
+
+    strata = report["views"].get("test_by_repo_context") or {}
+    if strata:
+        L += ["## Test, split by what the repository shows about callers", "",
+              "Pairs are grouped by the vulnerable version: callers of the function found in other files, a "
+              "web-framework entry point with no such callers, or neither. This shows where cross-file context "
+              "can matter.", ""]
         for name, v in strata.items():
             L += [f"### {name} — {v['samples']} functions, {v['pairs']} pairs", ""] + _md_signal(v, systems) + [""]
 
@@ -955,6 +942,26 @@ def build_report(write: bool = True) -> dict:
             ) if rs
         }
 
+    def repo(r: dict) -> dict:
+        return r.get("repo_context") if isinstance(r.get("repo_context"), dict) else {}
+
+    has_repo_context = any(repo(r).get("status") not in (None, "disabled") for r in test)
+    if has_repo_context:
+        # Stratified by the vulnerable version, so both halves of a pair stay together.
+        by_pair = {r["pair_id"]: repo(r) for r in test if r["label"] == 1}
+
+        def stratum(r: dict) -> str:
+            info = by_pair.get(r["pair_id"], repo(r))
+            if (info.get("call_sites") or 0) > 0:
+                return "Callers found in other files"
+            return "Framework entry point, no cross-file callers" if info.get("entry_point") else "Neither"
+
+        views["test_by_repo_context"] = {
+            name: _view(rs, systems, stats=True)
+            for name in ("Callers found in other files", "Framework entry point, no cross-file callers", "Neither")
+            if (rs := [r for r in test if stratum(r) == name])
+        }
+
     datasets = {r["dataset"] for r in rows} or {s.get("dataset") for s in samples}
     total = len(samples)
     report = {
@@ -984,8 +991,12 @@ def build_report(write: bool = True) -> dict:
             "The SAST board only reasons about Semgrep and Bandit findings, so its recall cannot exceed theirs. "
             "The sast_flagged view isolates what the board adds on the functions it is asked to review.",
             "The LLM-only rows ask the same model once, with no static findings: the function alone, and the "
-            "function plus same-file callers and callees. They are comparison baselines, not part of the shipped "
-            "pipeline. They never see the dataset label or CWE. Context is limited to the same file.",
+            "function plus the context the board sees. They are comparison baselines, not part of the shipped "
+            "pipeline. They never see the dataset label or CWE. "
+            + ("Context is same-file callers and callees, callers in other files of the repository at the same "
+               "commit (resolved by name and imports, test files excluded), and the web-framework entry point "
+               "when there is one."
+               if has_repo_context else "Context is limited to the same file."),
             "Token counts are Ollama's prompt_eval_count plus eval_count. Tokens per true positive divides the "
             "tokens spent on that system by the true positives of its dev-tuned threshold.",
             "Board thresholds and fusion models are fitted on the dev split only (maximising "
@@ -1029,6 +1040,7 @@ def build_report(write: bool = True) -> dict:
 
     from hackersec.analysis.llm import board as llm_board
     from hackersec.analysis.static import SEMGREP_CONFIGS
+    from hackersec.evaluation.realworld import repo_snapshot
     from hackersec.evaluation.metrics import collect_provenance
 
     report["provenance"] = collect_provenance({
@@ -1051,6 +1063,8 @@ def build_report(write: bool = True) -> dict:
         "workers": os.getenv("REALWORLD_WORKERS", "1"),
         "num_ctx": os.getenv("OLLAMA_NUM_CTX", "4096"),
         "context_chars": os.getenv("LLM_CONTEXT_CHARS", "1200"),
+        "repo_context": repo_snapshot.VERSION if has_repo_context else None,
+        "repo_context_chars": os.getenv("LLM_REPO_CONTEXT_CHARS", "800") if has_repo_context else None,
     })
 
     # Keep the dashboard chart working: baseline vs HackerSec, end-to-end, test.

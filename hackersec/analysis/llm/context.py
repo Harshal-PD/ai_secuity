@@ -4,18 +4,20 @@ Same-file callers and callees of a function, for the board's prompt.
 Whether a function is exploitable often depends on code around it: a caller
 that validates input first, or a helper that does the dangerous work. Judging
 the function alone is a known source of wrong function-level verdicts (Risse &
-Böhme, USENIX Security 2024). The dataset stores only the changed file, so the
-context is limited to definitions in that file.
+Böhme, USENIX Security 2024). This covers definitions in the same file;
+repo_context.py adds callers from the rest of the repository.
 """
 
 import ast
 import os
+import re
 
 MAX_CONTEXT_CHARS = int(os.getenv("LLM_CONTEXT_CHARS", "1200"))
 CALLEE_LINES = 8
 MAX_ITEMS = 3
 
 _FUNCS = (ast.FunctionDef, ast.AsyncFunctionDef)
+_NUMBERED_LINE = re.compile(r"^\s*\d+\| ?(.*)$")
 
 
 def _calls(node: ast.AST) -> list[tuple[str, int]]:
@@ -46,6 +48,11 @@ def _target(funcs: list, start: int, end: int):
 
 def _numbered(lines: list[str], first: int, last: int) -> list[str]:
     return [f"{n:>5}| {lines[n - 1]}" for n in range(first, min(last, len(lines)) + 1)]
+
+
+def context_code(context: str) -> str:
+    """The code lines of a rendered context, without line numbers or headings."""
+    return "\n".join(m.group(1) for m in map(_NUMBERED_LINE.match, context.splitlines()) if m)
 
 
 def function_context(source: str, start_line: int, end_line: int, max_chars: int = MAX_CONTEXT_CHARS) -> str:

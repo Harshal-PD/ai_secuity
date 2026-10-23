@@ -5,8 +5,9 @@ Per sample:
   1. Semgrep + Bandit on the whole file (cached; batched before the loop),
      keeping findings inside the target function.
   2. Comparison baselines (REALWORLD_BASELINES): the same model, one prompt,
-     no static findings — the function alone, and the function plus same-file
-     callers and callees. These are not part of the shipped pipeline.
+     no static findings — the function alone, and the function plus the same
+     context the board sees (same-file callers and callees, callers in other
+     files, framework entry point). These are not part of the shipped pipeline.
   3. One Joern session for taint flows on the static findings, when there
      are any. Files static analysis did not flag skip Joern.
   4. RAG definitions for those findings.
@@ -39,10 +40,10 @@ from hackersec.evaluation.realworld import sast_cache, split, state
 
 logger = logging.getLogger(__name__)
 
-PIPELINE_VERSION = "v8-precision-codeql"
+PIPELINE_VERSION = "v9-judge-repo-callers"
 MIN_FREE_GB = float(os.getenv("REALWORLD_MIN_FREE_GB", "5"))
 USE_CPG = os.getenv("REALWORLD_USE_CPG", "1") not in ("0", "false", "False")
-# function = whole function, no findings; context = that plus same-file callers.
+# function = whole function, no findings; context = that plus the board's context.
 # "0" records neither. Both are baselines; the shipped system is the SAST board.
 _BASELINE_RAW = os.getenv("REALWORLD_BASELINES", "function,context").strip().lower()
 BASELINES = set() if _BASELINE_RAW in ("", "0", "false", "off") else {p.strip() for p in _BASELINE_RAW.split(",") if p.strip()}
@@ -187,11 +188,37 @@ def _board_summary(res: dict) -> dict:
         "defender_status": defender.get("status"),
         "evidence_grounded": evidence.get("grounded"),
         "evidence_reason": evidence.get("reason"),
+        "evidence_location": evidence.get("location", "function") if evidence.get("grounded") else None,
         "code_truncated": res.get("code_truncated"),
         "context_overflow": res.get("context_overflow"),
         "max_prompt_tokens": res.get("max_prompt_tokens"),
         "judge_reasoning": (first.get("reasoning") or "")[:400],
     }
+
+
+def _context(sample: dict, source: str, start: int, end: int) -> tuple[str, dict]:
+    """Prompt context shared by the board and the context baseline, and a
+    summary of what it contains."""
+    from hackersec.analysis.llm import repo_context
+    from hackersec.analysis.llm.context import function_context
+    from hackersec.evaluation.realworld import repo_snapshot
+
+    same_file = function_context(source, start, end)
+    if not repo_snapshot.ENABLED:
+        return same_file, {"status": "disabled"}
+    rec = repo_snapshot.lookup(sample["sample_id"])
+    if rec and rec.get("status") == "ok":
+        entry, callers = rec.get("entry_point"), rec
+    else:
+        entry, callers = repo_context.entry_point(source, start, end), None
+    info = {
+        "status": rec.get("status") if rec else "missing",
+        "call_sites": (callers or {}).get("call_sites"),
+        "caller_files": (callers or {}).get("caller_files"),
+        "entry_point": (entry or {}).get("kind"),
+    }
+    text = "\n".join(p for p in (same_file, repo_context.render(entry, callers)) if p)
+    return text, info
 
 
 def _debate_fields(res: dict | None, pred: str, override: str, p: str, share: str, board: str) -> dict:
@@ -309,7 +336,6 @@ class Evaluator:
     def evaluate(self, sample: dict, meta: dict) -> dict:
         from hackersec.analysis.dedup import has_tool
         from hackersec.analysis.enrich import enrich_with_rag
-        from hackersec.analysis.llm.context import function_context
 
         started = time.time()
         record = {
@@ -344,7 +370,8 @@ class Evaluator:
         )
 
         # Extracted once for both the SAST board and the context baseline.
-        context = function_context(source, start, end) if (sast or "context" in BASELINES) else ""
+        context, repo_info = _context(sample, source, start, end) if (sast or "context" in BASELINES) else ("", None)
+        record["repo_context"] = repo_info
 
         # ── Baselines: same model, no static findings (outside the Joern lock)
         tokens = {"board": {"prompt": 0, "completion": 0, "calls": 0}}
@@ -466,6 +493,14 @@ def run_evaluation(retry_failed: bool = False, limit: int | None = None) -> None
         )
         logger.info(f"SAST prescan done: {scan}")
         state.update_status(sast_prescan=scan, detail=None)
+
+        from hackersec.evaluation.realworld import repo_snapshot
+
+        if repo_snapshot.ENABLED:
+            missing = sum(repo_snapshot.lookup(s["sample_id"]) is None for s in todo)
+            if missing:
+                logger.warning(f"{missing}/{len(todo)} samples have no cached repo context; they get no "
+                               "cross-file callers. Run the build phase (it needs internet) to fill the cache.")
 
         shared = Shared()
         evaluators = [Evaluator(i, shared) for i in range(WORKERS)]

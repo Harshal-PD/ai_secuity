@@ -4,6 +4,8 @@ Phase 1 — everything that needs the internet.
   1. Vendor the Semgrep rule packs so scanning works offline.
   2. Cache the embedding model and seed the RAG knowledge base.
   3. Build the labeled function-pair dataset from fix commits.
+  4. Find each sample's callers in the rest of its repository
+     (repo_snapshot.py).
 
 Commits are visited in a CWE-stratified round-robin order (seeded), so the
 first N pairs are spread across weakness classes instead of being dominated by
@@ -246,10 +248,14 @@ def build_all(datasets: list[str], targets: dict | None = None) -> None:
     marker = state.ROOT / "BUILD_COMPLETE.json"
     if (state.read_json(marker) or {}).get("plan") == plan:
         logger.info("Dataset already built; skipping the download phase")
-        return
+    else:
+        prepare_offline_assets()
+        for name, target in plan.items():
+            build_dataset(name, target)
+        state.write_json_atomic(marker, {"plan": plan, "seed": SEED})
 
-    prepare_offline_assets()
-    for name, target in plan.items():
-        build_dataset(name, target)
-    state.write_json_atomic(marker, {"plan": plan, "seed": SEED})
-    state.update_status(phase="build_done", detail="dataset ready")
+    # Its own checkpoint: samples already in the cache need no network.
+    from hackersec.evaluation.realworld import repo_snapshot
+
+    summary = repo_snapshot.prepare()
+    state.update_status(phase="build_done", detail="dataset ready", repo_context=summary)
