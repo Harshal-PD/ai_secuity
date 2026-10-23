@@ -95,6 +95,8 @@ SYSTEM_KEYS = {
 }
 HEADLINE_ORDER = ("board", "board_calibrated", "fusion", "full_board", "full_calibrated", "full_fusion")
 # Columns of the family table, which would be unreadable with every system.
+# Baselines the headline Judge vote is tested against directly, on the same functions.
+HEAD_TO_HEAD = ("llm_only", "llm_only_calibrated", "llm_context", "llm_context_calibrated")
 FAMILY_SYSTEMS = ("sast", "semgrep", "bandit", "board", "board_calibrated", "fusion", "llm_only_calibrated", "llm_context_calibrated")
 # LLM calls that produce each system's verdict. Calibrated rows share the calls.
 COST_BUCKET = {
@@ -334,6 +336,21 @@ def _vds(rows: list[dict], score_key: str, max_fpr: float) -> dict | None:
     return best
 
 
+def _pair_mcnemar(rows: list[dict], key: str, baseline_key: str) -> dict:
+    """Exact McNemar on whole pairs: is a pair correct (vulnerable flagged,
+    fixed cleared) under one system and not the other?"""
+    pairs = defaultdict(dict)
+    for r in rows:
+        pairs[r["pair_id"]][r["kind"]] = r
+    b = c = 0
+    for p in pairs.values():
+        if "vulnerable" not in p or "fixed" not in p:
+            continue
+        ok = [p["vulnerable"][k] == 1 and p["fixed"][k] == 0 for k in (key, baseline_key)]
+        b, c = b + (ok[0] and not ok[1]), c + (ok[1] and not ok[0])
+    return {"system_only_correct": b, "baseline_only_correct": c, "p_value": _binom_p(b, c)}
+
+
 def _mcnemar(rows: list[dict], key: str, baseline_key: str) -> dict:
     """Exact two-sided McNemar test on per-function correctness."""
     b = sum(1 for r in rows if r[key] == r["label"] and r[baseline_key] != r["label"])
@@ -398,6 +415,10 @@ def _bootstrap(rows: list[dict], systems: list[str]) -> dict:
             out[s]["delta_f1_vs_sast_ci"] = _ci(f1s[s] - f1s["sast"])
             out[s]["delta_mcc_vs_sast_ci"] = _ci(mccs[s] - mccs["sast"])
             out[s]["delta_youden_vs_sast_ci"] = _ci(js[s] - js["sast"])
+    for s in HEAD_TO_HEAD:
+        if s in mccs and "board" in mccs:
+            out[s]["delta_mcc_board_minus_ci"] = _ci(mccs["board"] - mccs[s])
+            out[s]["delta_youden_board_minus_ci"] = _ci(js["board"] - js[s])
     out["_resampling_unit"] = {"unit": "repository", "clusters": n, "draws": BOOTSTRAP}
     return out
 
@@ -638,6 +659,15 @@ def _view(rows: list[dict], systems: list[str], stats: bool) -> dict:
         for s, p in _holm({s: m["p_value"] for s, m in mcnemar.items() if s != "flag_all"}).items():
             mcnemar[s]["p_holm"] = p
         view["significance"] = {"bootstrap": _bootstrap(rows, systems), "mcnemar_vs_sast": mcnemar}
+        rivals = [s for s in HEAD_TO_HEAD if s in systems] if "board" in systems else []
+        if rivals:
+            board_key = SYSTEM_KEYS["board"][0]
+            h2h = {s: {"functions": _mcnemar(rows, board_key, SYSTEM_KEYS[s][0]),
+                       "pairs": _pair_mcnemar(rows, board_key, SYSTEM_KEYS[s][0])} for s in rivals}
+            for unit in ("functions", "pairs"):
+                for s, p in _holm({s: h[unit]["p_value"] for s, h in h2h.items()}).items():
+                    h2h[s][unit]["p_holm"] = p
+            view["significance"]["board_vs_baselines"] = h2h
     return view
 
 
@@ -743,6 +773,23 @@ def _md_view(name: str, v: dict, systems: list[str]) -> list[str]:
             f"| {m['mcc']:.3f}{_fmt_ci(b.get('mcc_ci'))} | {_fmt_ci(b.get('delta_mcc_vs_sast_ci')).strip() or '—'} "
             f"| {m['f1']:.3f}{_fmt_ci(b.get('f1_ci'))} | {_fmt_p(p)} |"
         )
+    h2h = sig.get("board_vs_baselines") or {}
+    if h2h:
+        L += ["", f"**{SYSTEM_LABELS['board']} vs the LLM baselines** (paired, same functions). Δ = board − "
+              "baseline; CIs resample whole repositories. McNemar counts functions, or whole pairs, that one "
+              "system gets right and the other does not; p values are Holm-corrected across the baselines.", "",
+              "| Baseline | ΔMCC [95% CI] | ΔJ [95% CI] | Functions: only board right / only baseline right "
+              "| McNemar p | Pairs: only board correct / only baseline correct | Pair McNemar p |",
+              "|---|---|---|---|---|---|---|"]
+        for s, h in h2h.items():
+            b, f, pr = boot.get(s, {}), h["functions"], h["pairs"]
+            L.append(
+                f"| {SYSTEM_LABELS[s]} | {_fmt_ci(b.get('delta_mcc_board_minus_ci')).strip() or '—'} "
+                f"| {_fmt_ci(b.get('delta_youden_board_minus_ci')).strip() or '—'} "
+                f"| {f['system_only_correct']} / {f['baseline_only_correct']} | {_fmt_p(f.get('p_holm', f['p_value']))} "
+                f"| {pr['system_only_correct']} / {pr['baseline_only_correct']} "
+                f"| {_fmt_p(pr.get('p_holm', pr['p_value']))} |"
+            )
     L += _md_cost(v)
 
     subsets = [("static analysis flagged", v["sast_flagged"])]
