@@ -1,4 +1,4 @@
-# HackerSec real-world evaluation (2026-10-23T23:46:01)
+# HackerSec real-world evaluation (2026-10-23T23:52:39)
 
 Status: **complete** — 2506/2506 samples evaluated (100.0%), 0 LLM failures, 0 errors. Pipeline: `v9-judge-repo-callers`.
 
@@ -61,6 +61,15 @@ Each pair contributes one vulnerable and one fixed function, so flagging every f
 | LLM only, dev-tuned threshold | 0.557 | 0.268 | 0.212 | 0.527 | 0.064 [0.024, 0.108] | [-0.057, 0.046] | 0.361 [0.302, 0.419] | 0.884 |
 | LLM only + same-file context, no SAST | 0.571 | 0.253 | 0.190 | 0.531 | 0.075 [0.036, 0.122] | [-0.045, 0.057] | 0.350 [0.291, 0.412] | 1.000 |
 | LLM only + context, dev-tuned threshold | 0.577 | 0.215 | 0.158 | 0.529 | 0.074 [0.021, 0.124] | [-0.049, 0.057] | 0.313 [0.250, 0.378] | 0.942 |
+
+**SAST board: Judge vote vs the LLM baselines** (paired, same functions). Δ = board − baseline; CIs resample whole repositories. McNemar counts functions, or whole pairs, that one system gets right and the other does not; p values are Holm-corrected across the baselines.
+
+| Baseline | ΔMCC [95% CI] | ΔJ [95% CI] | Functions: only board right / only baseline right | McNemar p | Pairs: only board correct / only baseline correct | Pair McNemar p |
+|---|---|---|---|---|---|---|
+| LLM only, whole function, no SAST | [-0.007, 0.099] | [-0.013, 0.072] | 80 / 68 | 1.000 | 28 / 19 | 0.972 |
+| LLM only, dev-tuned threshold | [-0.007, 0.099] | [-0.013, 0.072] | 80 / 68 | 1.000 | 28 / 19 | 0.972 |
+| LLM only + same-file context, no SAST | [-0.019, 0.089] | [-0.022, 0.064] | 73 / 64 | 1.000 | 28 / 20 | 0.972 |
+| LLM only + context, dev-tuned threshold | [-0.020, 0.098] | [-0.015, 0.070] | 73 / 62 | 1.000 | 26 / 20 | 0.972 |
 
 **Tokens per detection** (prompt + completion). The mean is over every function, so the SAST board costs nothing on functions static analysis did not flag. Tokens per true positive uses the dev-tuned threshold when that row exists.
 
@@ -163,6 +172,15 @@ Each pair contributes one vulnerable and one fixed function, so flagging every f
 | LLM only + same-file context, no SAST | 0.559 | 0.308 | 0.244 | 0.532 | 0.072 [0.029, 0.118] | [-0.072, 0.030] | 0.397 [0.343, 0.450] | 0.629 |
 | LLM only + context, dev-tuned threshold | 0.584 | 0.276 | 0.197 | 0.540 | 0.094 [0.048, 0.140] | [-0.046, 0.051] | 0.375 [0.317, 0.430] | 0.946 |
 
+**SAST board: Judge vote vs the LLM baselines** (paired, same functions). Δ = board − baseline; CIs resample whole repositories. McNemar counts functions, or whole pairs, that one system gets right and the other does not; p values are Holm-corrected across the baselines.
+
+| Baseline | ΔMCC [95% CI] | ΔJ [95% CI] | Functions: only board right / only baseline right | McNemar p | Pairs: only board correct / only baseline correct | Pair McNemar p |
+|---|---|---|---|---|---|---|
+| LLM only, whole function, no SAST | [0.030, 0.155] | [0.017, 0.129] | 96 / 68 | 0.139 | 44 / 17 | 0.003 |
+| LLM only, dev-tuned threshold | [0.026, 0.152] | [0.015, 0.126] | 96 / 69 | 0.139 | 44 / 18 | 0.004 |
+| LLM only + same-file context, no SAST | [0.022, 0.142] | [0.010, 0.115] | 96 / 72 | 0.151 | 42 / 21 | 0.022 |
+| LLM only + context, dev-tuned threshold | [0.003, 0.118] | [-0.000, 0.096] | 90 / 72 | 0.181 | 41 / 28 | 0.148 |
+
 **Tokens per detection** (prompt + completion). The mean is over every function, so the SAST board costs nothing on functions static analysis did not flag. Tokens per true positive uses the dev-tuned threshold when that row exists.
 
 | System | Functions sent to the LLM | Mean tokens / function | True positives | Tokens per true positive |
@@ -264,6 +282,15 @@ Each pair contributes one vulnerable and one fixed function, so flagging every f
 | LLM only + same-file context, no SAST | 0.579 | 0.365 | 0.265 | 0.550 | 0.108 [0.049, 0.174] | [-0.005, 0.074] | 0.448 [0.378, 0.521] | 0.477 |
 | LLM only + context, dev-tuned threshold | 0.592 | 0.355 | 0.245 | 0.555 | 0.120 [0.059, 0.186] | [0.004, 0.091] | 0.444 [0.372, 0.522] | 0.356 |
 
+**SAST board: Judge vote vs the LLM baselines** (paired, same functions). Δ = board − baseline; CIs resample whole repositories. McNemar counts functions, or whole pairs, that one system gets right and the other does not; p values are Holm-corrected across the baselines.
+
+| Baseline | ΔMCC [95% CI] | ΔJ [95% CI] | Functions: only board right / only baseline right | McNemar p | Pairs: only board correct / only baseline correct | Pair McNemar p |
+|---|---|---|---|---|---|---|
+| LLM only, whole function, no SAST | [-0.046, 0.065] | [-0.056, 0.043] | 32 / 33 | 1.000 | 10 / 13 | 1.000 |
+| LLM only, dev-tuned threshold | [-0.046, 0.065] | [-0.056, 0.043] | 32 / 33 | 1.000 | 10 / 13 | 1.000 |
+| LLM only + same-file context, no SAST | [-0.041, 0.066] | [-0.045, 0.047] | 33 / 33 | 1.000 | 11 / 9 | 1.000 |
+| LLM only + context, dev-tuned threshold | [-0.054, 0.052] | [-0.056, 0.035] | 33 / 35 | 1.000 | 11 / 11 | 1.000 |
+
 **Tokens per detection** (prompt + completion). The mean is over every function, so the SAST board costs nothing on functions static analysis did not flag. Tokens per true positive uses the dev-tuned threshold when that row exists.
 
 | System | Functions sent to the LLM | Mean tokens / function | True positives | Tokens per true positive |
@@ -364,6 +391,15 @@ Each pair contributes one vulnerable and one fixed function, so flagging every f
 | LLM only, dev-tuned threshold | 0.560 | 0.308 | 0.242 | 0.533 | 0.074 [0.049, 0.102] | [-0.038, 0.024] | 0.398 [0.364, 0.428] | 0.815 |
 | LLM only + same-file context, no SAST | 0.568 | 0.297 | 0.227 | 0.535 | 0.081 [0.053, 0.108] | [-0.030, 0.029] | 0.390 [0.354, 0.424] | 1.000 |
 | LLM only + context, dev-tuned threshold | 0.584 | 0.268 | 0.191 | 0.538 | 0.091 [0.062, 0.120] | [-0.019, 0.041] | 0.367 [0.329, 0.403] | 0.855 |
+
+**SAST board: Judge vote vs the LLM baselines** (paired, same functions). Δ = board − baseline; CIs resample whole repositories. McNemar counts functions, or whole pairs, that one system gets right and the other does not; p values are Holm-corrected across the baselines.
+
+| Baseline | ΔMCC [95% CI] | ΔJ [95% CI] | Functions: only board right / only baseline right | McNemar p | Pairs: only board correct / only baseline correct | Pair McNemar p |
+|---|---|---|---|---|---|---|
+| LLM only, whole function, no SAST | [0.023, 0.092] | [0.011, 0.067] | 208 / 169 | 0.201 | 82 / 49 | 0.020 |
+| LLM only, dev-tuned threshold | [0.022, 0.090] | [0.010, 0.066] | 208 / 170 | 0.201 | 82 / 50 | 0.020 |
+| LLM only + same-file context, no SAST | [0.015, 0.082] | [0.004, 0.060] | 202 / 169 | 0.201 | 81 / 50 | 0.020 |
+| LLM only + context, dev-tuned threshold | [0.005, 0.073] | [0.000, 0.055] | 196 / 169 | 0.201 | 78 / 59 | 0.124 |
 
 **Tokens per detection** (prompt + completion). The mean is over every function, so the SAST board costs nothing on functions static analysis did not flag. Tokens per true positive uses the dev-tuned threshold when that row exists.
 
@@ -506,6 +542,15 @@ SAST-reachable families have a code pattern Semgrep/Bandit can match; logic fami
 | LLM only, dev-tuned threshold | 0.570 | 0.314 | 0.237 | 0.538 | 0.086 [0.051, 0.124] | [-0.031, 0.062] | 0.405 [0.356, 0.449] | 0.819 |
 | LLM only + same-file context, no SAST | 0.596 | 0.284 | 0.192 | 0.546 | 0.108 [0.070, 0.148] | [-0.009, 0.083] | 0.385 [0.335, 0.434] | 0.545 |
 | LLM only + context, dev-tuned threshold | 0.610 | 0.263 | 0.169 | 0.547 | 0.115 [0.074, 0.160] | [-0.006, 0.098] | 0.368 [0.315, 0.420] | 0.507 |
+
+**SAST board: Judge vote vs the LLM baselines** (paired, same functions). Δ = board − baseline; CIs resample whole repositories. McNemar counts functions, or whole pairs, that one system gets right and the other does not; p values are Holm-corrected across the baselines.
+
+| Baseline | ΔMCC [95% CI] | ΔJ [95% CI] | Functions: only board right / only baseline right | McNemar p | Pairs: only board correct / only baseline correct | Pair McNemar p |
+|---|---|---|---|---|---|---|
+| LLM only, whole function, no SAST | [-0.010, 0.089] | [-0.017, 0.067] | 75 / 67 | 1.000 | 26 / 18 | 1.000 |
+| LLM only, dev-tuned threshold | [-0.014, 0.084] | [-0.021, 0.063] | 75 / 68 | 1.000 | 26 / 19 | 1.000 |
+| LLM only + same-file context, no SAST | [-0.040, 0.067] | [-0.037, 0.049] | 69 / 67 | 1.000 | 24 / 21 | 1.000 |
+| LLM only + context, dev-tuned threshold | [-0.054, 0.062] | [-0.044, 0.048] | 68 / 67 | 1.000 | 25 / 24 | 1.000 |
 
 **Tokens per detection** (prompt + completion). The mean is over every function, so the SAST board costs nothing on functions static analysis did not flag. Tokens per true positive uses the dev-tuned threshold when that row exists.
 
