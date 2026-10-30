@@ -27,13 +27,16 @@ def enrich_with_cpg(
     client=None,
     extra=None,
     method_line: int | None = None,
+    root: Path | None = None,
 ) -> str:
     """
     Attach Joern taint flows to each finding. Returns a status string.
 
     `target_path` may be a file or a directory; a file's directory is imported
-    so the CPG stays small. Joern resolves the path itself, so it must be on a
-    volume the Joern container shares. `extra(client, project, rel_path)` runs
+    so the CPG stays small, unless `root` names a directory that contains the
+    target (a version root with companion files), which is imported instead so
+    cross-file imports resolve. Joern resolves the path itself, so it must be on
+    a volume the Joern container shares. `extra(client, project, rel_path)` runs
     further queries against the same imported project before it is deleted.
     """
     from hackersec.analysis.joern.client import JoernClient
@@ -46,7 +49,7 @@ def enrich_with_cpg(
         return "skipped_no_findings"
 
     target = Path(target_path)
-    root = target if target.is_dir() else target.parent
+    root = Path(root) if root else (target if target.is_dir() else target.parent)
     project = f"hs_{job_id}"
     joern_client = client or JoernClient()
 

@@ -39,6 +39,7 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
 from hackersec.evaluation.realworld import llm_screen, sast_cache, split, state
+from hackersec.evaluation.realworld.gitfetch import TREE_MODE, version_root_of
 
 logger = logging.getLogger(__name__)
 
@@ -325,7 +326,8 @@ class Evaluator:
                     for f in findings:
                         f.cpg_context = None
                 status = enrich_with_cpg(
-                    findings, Path(sample["file"]), job_id=job, client=self.joern, extra=extra, method_line=method_line
+                    findings, Path(sample["file"]), job_id=job, client=self.joern, extra=extra,
+                    method_line=method_line, root=version_root_of(sample["file"]) if TREE_MODE else None,
                 )
                 if status != "failed":
                     break

@@ -7,11 +7,14 @@ downloaded. A commit costs a few seconds and a few KB — no API token and no
 rate limit, which matters for an unattended overnight build.
 """
 
+import ast
 import logging
 import os
+import posixpath
 import re
 import subprocess
-from pathlib import Path
+import warnings
+from pathlib import Path, PurePosixPath
 
 from hackersec.evaluation.realworld import state
 from hackersec.evaluation.realworld.net import NetworkDown, internet_up
@@ -20,6 +23,12 @@ logger = logging.getLogger(__name__)
 
 FETCH_TIMEOUT = int(os.getenv("REALWORLD_GIT_TIMEOUT", "240"))
 MAX_FILE_BYTES = 1_000_000
+# Local files a sample's file imports (plus its callers) that are stored next to
+# it, so Joern and CodeQL can resolve cross-file imports. 0 turns this off.
+MAX_COMPANIONS = int(os.getenv("REALWORLD_COMPANION_FILES", "15"))
+# Joern and CodeQL analyse the whole before/after tree instead of one file
+# (set REALWORLD_TREE_MODE=0 to restore the one-file behaviour).
+TREE_MODE = os.getenv("REALWORLD_TREE_MODE", "1").lower() not in ("0", "false", "no", "off")
 
 _GIT_ENV = {
     **os.environ,
@@ -37,6 +46,78 @@ class Unavailable(Exception):
 def _slug(repo_url: str) -> str:
     tail = repo_url.rstrip("/").removesuffix(".git").split("github.com/")[-1]
     return re.sub(r"[^A-Za-z0-9_.-]+", "__", tail)
+
+
+def version_root_of(file: str) -> Path | None:
+    """The `<dataset>/<slug>/<sha12>/{before,after}` directory that holds this
+    sample file and its companion files, or None when `file` is not under
+    FILES_DIR in that layout."""
+    try:
+        rel = Path(file).resolve().relative_to(state.FILES_DIR.resolve())
+    except (ValueError, OSError):
+        return None
+    if len(rel.parts) < 5 or rel.parts[3] not in ("before", "after"):
+        return None
+    return Path(file).parents[len(rel.parts) - 5]
+
+
+def resolve_local_imports(
+    source_code: str,
+    target_rel_path: str,
+    repo_py_files: set[str],
+    max_files: int = MAX_COMPANIONS,
+) -> list[str]:
+    """Repo-relative .py files that `source_code` imports: relative imports,
+    absolute imports from the repo root or from any directory above the target
+    (src/ layouts), and the package `__init__.py` files above the target."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", SyntaxWarning)
+        try:
+            tree = ast.parse(source_code)
+        except (SyntaxError, ValueError):
+            return []
+
+    target_dir = PurePosixPath(target_rel_path).parent
+    found: list[str] = []
+
+    def add(candidate) -> None:
+        norm = posixpath.normpath(str(candidate))
+        if norm in repo_py_files and norm != target_rel_path and norm not in found:
+            found.append(norm)
+
+    cur = target_dir
+    while str(cur) not in ("", "."):
+        add(cur / "__init__.py")
+        cur = cur.parent
+
+    modules: set[tuple[int, str]] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.update((0, a.name) for a in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            level, mod = node.level or 0, node.module or ""
+            modules.add((level, mod))
+            modules.update((level, f"{mod}.{a.name}" if mod else a.name) for a in node.names)
+
+    ancestors = [target_dir, *target_dir.parents]
+    for level, mod in sorted(modules):
+        parts = [p for p in mod.split(".") if p]
+        if level > 0:
+            base = target_dir
+            for _ in range(level - 1):
+                base = base.parent
+            rel = base.joinpath(*parts)
+            if parts:
+                add(f"{rel}.py")
+            add(rel / "__init__.py")
+        elif parts:
+            rel = PurePosixPath(*parts)
+            for anc in ancestors:
+                add(f"{anc / rel}.py")
+                add(anc / rel / "__init__.py")
+        if len(found) >= max_files:
+            break
+    return found[:max_files]
 
 
 class GitFetcher:
@@ -113,6 +194,48 @@ class GitFetcher:
         repo = self._repo(repo_url)
         self._ensure_commit(repo, sha)
         return self._show(repo, f"{sha}^", path), self._show(repo, sha, path)
+
+    def py_files(self, repo_url: str, rev: str) -> set[str]:
+        """Every .py path in the repository tree at `rev` (git ls-tree)."""
+        repo = self._repo(repo_url)
+        proc = self._git(repo, "ls-tree", "-r", "-z", "--name-only", rev, timeout=120)
+        if proc.returncode != 0:
+            self._fail(f"ls-tree {rev[:12]}", proc)
+        return {p for p in proc.stdout.decode("utf-8", "replace").split("\0") if p.endswith(".py")}
+
+    def companion_files(
+        self,
+        repo_url: str,
+        sha: str,
+        path: str,
+        before_src: str,
+        after_src: str,
+        extra_paths: list[str] | None = None,
+        max_files: int = MAX_COMPANIONS,
+    ) -> tuple[dict[str, str], dict[str, str]]:
+        """({path: source} before, {path: source} after): the local files that
+        `path` imports at `sha^` and at `sha`, plus `extra_paths` (callers)
+        that exist in that tree. A file that is binary or too large is skipped."""
+        repo = self._repo(repo_url)
+        self._ensure_commit(repo, sha)
+        extras = [posixpath.normpath(p.lstrip("/")) for p in (extra_paths or [])]
+        sides = []
+        for rev, src in ((f"{sha}^", before_src), (sha, after_src)):
+            tree = self.py_files(repo_url, rev)
+            paths = resolve_local_imports(src, path, tree, max_files)
+            for p in extras:
+                if p in tree and p != path and p not in paths and len(paths) < max_files:
+                    paths.append(p)
+            files: dict[str, str] = {}
+            for p in paths:
+                try:
+                    text = self._show(repo, rev, p)
+                except Unavailable:
+                    continue
+                if text is not None:
+                    files[p] = text
+            sides.append(files)
+        return sides[0], sides[1]
 
     def changed_py_files(self, repo_url: str, sha: str) -> list[str]:
         """Python files touched by the commit, when the dataset does not list them."""

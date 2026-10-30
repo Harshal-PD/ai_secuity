@@ -20,7 +20,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from hackersec.analysis.static import SEMGREP_CONFIGS as SEMGREP_PACKS
-from hackersec.evaluation.realworld import state
+from hackersec.evaluation.realworld import gitfetch, state
 from hackersec.evaluation.realworld.functions import extract_pairs, skip_reason
 from hackersec.evaluation.realworld.gitfetch import GitFetcher, Unavailable, _slug
 from hackersec.evaluation.realworld.net import with_network_retry
@@ -182,6 +182,31 @@ def _emit(c: dict, collected: list) -> list[dict]:
     return samples
 
 
+def _emit_companions(c: dict, collected: list, fetcher: GitFetcher) -> int:
+    """Store the local files each target file imports next to it, in the same
+    before/after tree, so Joern and CodeQL can resolve its imports. Targets
+    already on disk are never overwritten. Returns the number of files written."""
+    if c.get("local") or not collected or gitfetch.MAX_COMPANIONS <= 0:
+        return 0
+    base_dir = state.FILES_DIR / c["dataset"] / _slug(c["repo_url"]) / c["sha"][:12]
+    written = 0
+    for path in dict.fromkeys(p for p, _, _, _ in collected):
+        before = next(b for p, _, b, _ in collected if p == path)
+        after = next(a for p, _, _, a in collected if p == path)
+        try:
+            before_comp, after_comp = fetcher.companion_files(c["repo_url"], c["sha"], path, before, after)
+        except Unavailable as e:
+            logger.info(f"  {path}: companions unavailable: {e}")
+            continue
+        for side, files in (("before", before_comp), ("after", after_comp)):
+            for rel, text in files.items():
+                dest = base_dir / side / rel
+                if not dest.exists():
+                    _write(dest, text)
+                    written += 1
+    return written
+
+
 def build_dataset(name: str, target: int, seed: int = SEED) -> dict:
     state.update_status(phase="build", dataset=name, detail="loading commit list")
     commits = LOADERS[name]()
@@ -211,6 +236,7 @@ def build_dataset(name: str, target: int, seed: int = SEED) -> dict:
         # Room left under the target: never overshoot by a whole commit's worth.
         collected = collected[: max(0, target - dp["pairs"])]
         samples = _emit(c, collected)
+        with_network_retry(lambda c=c, collected=collected: _emit_companions(c, collected, fetcher), f"{key} companions")
         for s in samples:
             state.append_jsonl(state.SAMPLES_PATH, s)
 

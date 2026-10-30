@@ -993,8 +993,6 @@ def _run_codeql_cmd(targets: list[Path], job_id: str) -> list[Finding] | None:
     with tempfile.TemporaryDirectory(prefix=f"hs_codeql_{job_id}_") as tmp:
         tmp_root = Path(tmp)
         src_root = tmp_root / "src"
-        db_dir = tmp_root / "db"
-        sarif_path = tmp_root / "results.sarif"
         src_root.mkdir(parents=True, exist_ok=True)
 
         path_map: dict[str, str] = {}
@@ -1014,30 +1012,56 @@ def _run_codeql_cmd(targets: list[Path], job_id: str) -> list[Finding] | None:
         if not path_map:
             return []
 
-        create_cmd = [
-            bin_path, "database", "create", str(db_dir),
-            "--language=python", f"--source-root={src_root}",
-            f"--threads={CODEQL_JOBS}", "--overwrite",
-        ]
-        analyze_cmd = [
-            bin_path, "database", "analyze", str(db_dir), CODEQL_SUITE,
-            "--format=sarif-latest", f"--output={sarif_path}",
-            f"--threads={CODEQL_JOBS}",
-        ]
-        try:
-            c_res = subprocess.run(create_cmd, capture_output=True, text=True, timeout=timeout, errors="replace")
-            if c_res.returncode != 0:
-                logger.warning(f"[{job_id}] CodeQL database create exited {c_res.returncode}: {c_res.stderr[:300]}")
-                return None
-            a_res = subprocess.run(analyze_cmd, capture_output=True, text=True, timeout=timeout, errors="replace")
-            if a_res.returncode != 0 or not sarif_path.is_file():
-                logger.warning(f"[{job_id}] CodeQL analyze exited {a_res.returncode}: {a_res.stderr[:300]}")
-                return None
-            sarif = json.loads(sarif_path.read_text(encoding="utf-8", errors="replace"))
-            return _parse_codeql_sarif(sarif, path_map, job_id)
-        except (subprocess.TimeoutExpired, OSError, json.JSONDecodeError) as e:
-            logger.warning(f"[{job_id}] CodeQL execution failed: {e}")
+        return _codeql_scan(bin_path, src_root, tmp_root, path_map, job_id, timeout)
+
+
+def _codeql_scan(
+    bin_path: str, src_root: Path, tmp_root: Path, path_map: dict[str, str], job_id: str, timeout: int
+) -> list[Finding] | None:
+    """Build one CodeQL database from `src_root`, analyze it, and map the SARIF
+    locations (relative to `src_root`) back to real paths with `path_map`."""
+    db_dir = tmp_root / "db"
+    sarif_path = tmp_root / "results.sarif"
+    create_cmd = [
+        bin_path, "database", "create", str(db_dir),
+        "--language=python", f"--source-root={src_root}",
+        f"--threads={CODEQL_JOBS}", "--overwrite",
+    ]
+    analyze_cmd = [
+        bin_path, "database", "analyze", str(db_dir), CODEQL_SUITE,
+        "--format=sarif-latest", f"--output={sarif_path}",
+        f"--threads={CODEQL_JOBS}",
+    ]
+    try:
+        c_res = subprocess.run(create_cmd, capture_output=True, text=True, timeout=timeout, errors="replace")
+        if c_res.returncode != 0:
+            logger.warning(f"[{job_id}] CodeQL database create exited {c_res.returncode}: {c_res.stderr[:300]}")
             return None
+        a_res = subprocess.run(analyze_cmd, capture_output=True, text=True, timeout=timeout, errors="replace")
+        if a_res.returncode != 0 or not sarif_path.is_file():
+            logger.warning(f"[{job_id}] CodeQL analyze exited {a_res.returncode}: {a_res.stderr[:300]}")
+            return None
+        sarif = json.loads(sarif_path.read_text(encoding="utf-8", errors="replace"))
+        return _parse_codeql_sarif(sarif, path_map, job_id)
+    except (subprocess.TimeoutExpired, OSError, json.JSONDecodeError) as e:
+        logger.warning(f"[{job_id}] CodeQL execution failed: {e}")
+        return None
+
+
+def run_codeql_tree(source_root: Path, job_id: str = "standalone") -> list[Finding] | None:
+    """Analyze a whole source tree in place (no flat renaming), so imports between
+    its files resolve. Findings are returned for every .py file under the root;
+    the caller keeps the ones it asked for. None means the analysis failed."""
+    bin_path = _resolve_codeql_bin()
+    if not bin_path or not codeql_available():
+        return []
+    root = Path(source_root)
+    path_map = {p.relative_to(root).as_posix(): str(p) for p in root.rglob("*.py")}
+    if not path_map:
+        return []
+    timeout = 240 + 20 * min(len(path_map) - 1, 40)
+    with tempfile.TemporaryDirectory(prefix=f"hs_codeql_{job_id}_") as tmp:
+        return _codeql_scan(bin_path, root, Path(tmp), path_map, job_id, timeout)
 
 
 def run_codeql(target_path: Path, job_id: str = "standalone") -> list[Finding]:
