@@ -13,8 +13,9 @@ Per sample:
      are any. Files static analysis did not flag skip Joern.
   4. RAG definitions for those findings.
   5. One board debate for union-gated candidates: SAST findings, or (when the
-     Soft LLM Screen is on) SAST-unflagged functions whose llm_context_p is at
-     or above tau_recall. Functions failing both gates are SAFE (0 board tokens).
+     Soft LLM Screen is on) SAST-unflagged functions the context baseline flags as
+     VULNERABLE (rule flag, the default; rule tau: llm_context_p at or above tau_recall).
+     Functions failing both gates are SAFE (0 board tokens).
 Fusion and calibrated thresholds are fitted on the dev split at report time.
 
 Several workers run in parallel (REALWORLD_WORKERS), spread round-robin over
@@ -420,7 +421,9 @@ class Evaluator:
         if llm_p is None and sample["sample_id"] in self.shared.llm_context_scores:
             llm_p = self.shared.llm_context_scores[sample["sample_id"]]
             record["llm_context_p"] = llm_p
-        origin = llm_screen.gate_origin(bool(sast), llm_p, self.shared.tau_recall)
+        origin = llm_screen.gate_origin(
+            bool(sast), record.get("llm_context_pred"), llm_p, self.shared.tau_recall
+        )
         record["tau_recall"] = self.shared.tau_recall
         record["gate_origin"] = origin
         record["board_candidate"] = int(origin is not None)
@@ -523,10 +526,12 @@ def run_evaluation(retry_failed: bool = False, limit: int | None = None) -> None
     logger.info(f"{len(samples)} samples, {len(samples) - len(todo)} already done, {len(todo)} to go; "
                 f"{WORKERS} workers over {len(ollama_urls())} Ollama and {len(joern_urls()) if USE_CPG else 0} "
                 f"Joern server(s); baselines {', '.join(sorted(BASELINES)) or 'off'}"
-                f"{'; soft LLM screen on' if llm_screen.ENABLED else ''}")
+                f"{'; soft LLM screen on, rule ' + llm_screen.RULE if llm_screen.ENABLED else ''}")
 
-    # Soft LLM Screen: reuse llm_context_p from disk and tune tau_recall on DEV.
-    tau_meta = llm_screen.ensure_tau(splits, results) if llm_screen.ENABLED else None
+    # Soft LLM Screen, rule tau only: reuse llm_context_p from disk and tune tau_recall on DEV.
+    tau_meta = (
+        llm_screen.ensure_tau(splits, results) if llm_screen.ENABLED and llm_screen.RULE == "tau" else None
+    )
     tau_recall = (tau_meta or {}).get("tau_recall")
     score_rows = llm_screen.collect_score_records(splits, results) if llm_screen.ENABLED else []
     llm_context_scores = {
@@ -646,7 +651,7 @@ def run_evaluation(retry_failed: bool = False, limit: int | None = None) -> None
 
     results = state.load_results()
     # Refresh tau_recall from whatever DEV llm_context_p the run produced (next start reuses it).
-    if llm_screen.ENABLED and not _stop:
+    if llm_screen.ENABLED and llm_screen.RULE == "tau" and not _stop:
         tau_meta = llm_screen.ensure_tau(splits, results)
         if tau_meta:
             state.update_status(tau_recall=tau_meta.get("tau_recall"), llm_screen_meta=tau_meta)

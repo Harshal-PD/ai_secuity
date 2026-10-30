@@ -234,6 +234,8 @@ services:
       - REALWORLD_BASELINES=${REALWORLD_BASELINES:-function,context}
       # CodeQL: flat 25-file batches (0, default) or one database per version root (1, much slower).
       - REALWORLD_CODEQL_TREE=${REALWORLD_CODEQL_TREE:-0}
+      # Soft LLM Screen rule: flag (every LLM-flagged function goes to the Board) or tau (score threshold).
+      - REALWORLD_LLM_SCREEN_RULE=${REALWORLD_LLM_SCREEN_RULE:-flag}
     depends_on:
       ollama:
         condition: service_started

@@ -215,7 +215,7 @@ def _calibrate(rows: list[dict]) -> dict:
     # Soft LLM Screen: persist / refresh tau_recall from DEV unflagged llm_context_p.
     from hackersec.evaluation.realworld import llm_screen
 
-    if llm_screen.ENABLED and rows and any(r.get("llm_context_p") is not None for r in rows):
+    if llm_screen.ENABLED and llm_screen.RULE == "tau" and rows and any(r.get("llm_context_p") is not None for r in rows):
         screen = llm_screen.tune_tau_recall(dev) or llm_screen.load_tau()
         if screen:
             out["tau_recall"] = screen.get("tau_recall")
@@ -912,6 +912,8 @@ def _markdown(report: dict) -> str:
     if cal.get("llm_context_threshold") is not None:
         L.append(f"- LLM-only + context threshold on P(vulnerable): **{cal['llm_context_threshold']:.3f}** "
                  f"(max {objective} on dev)")
+    from hackersec.evaluation.realworld import llm_screen
+
     if cal.get("tau_recall") is not None:
         screen = cal.get("llm_screen") or {}
         L.append(
@@ -920,6 +922,8 @@ def _markdown(report: dict) -> str:
             f"achieved {100 * (screen.get('pass_rate_achieved') or 0):.1f}% of "
             f"{screen.get('n_dev_unflagged_scored', '?')} functions)"
         )
+    elif llm_screen.ENABLED and llm_screen.RULE == "flag":
+        L.append("- Soft LLM Screen: every function the context baseline flags as VULNERABLE goes to the Board (no score threshold)")
     L += ["", "Each pair contributes one vulnerable and one fixed function, so flagging every function scores "
           "F1 0.667, accuracy 0.5 and MCC 0 (the trivial reference row). MCC, accuracy and the pairwise "
           "columns show whether a system actually separates vulnerable from fixed code.", ""]

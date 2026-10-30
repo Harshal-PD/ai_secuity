@@ -1,7 +1,14 @@
 """
 Soft LLM Screen (union gate) for functions deterministic SAST does not flag.
 
-Gate rule (shipped when enabled):
+Gate rule, default (REALWORLD_LLM_SCREEN_RULE=flag):
+  board_candidate(x) = SAST_Gate(x) OR LLM_flag(x)
+
+LLM_flag is the single-pass context baseline's verdict (`llm_context_pred`, 1 when
+it says VULNERABLE). Every function it flags goes to the Board; no score threshold
+drops any of them.
+
+Gate rule tau (REALWORLD_LLM_SCREEN_RULE=tau, the earlier percentile gate):
   board_candidate(x) = SAST_Gate(x) OR S_LLM(x) >= tau_recall
 
 S_LLM is the single-pass LLM+context probability (`llm_context_p`).
@@ -26,6 +33,11 @@ logger = logging.getLogger(__name__)
 
 # Soft screen on by default; set REALWORLD_LLM_SCREEN=0 to restore SAST-only gate.
 ENABLED = os.getenv("REALWORLD_LLM_SCREEN", "1") not in ("0", "false", "False")
+# "flag": every function the context baseline flags as VULNERABLE goes to the Board.
+# "tau": the earlier score threshold (tau_recall).
+RULE = (os.getenv("REALWORLD_LLM_SCREEN_RULE") or "flag").strip().lower()
+if RULE not in ("flag", "tau"):
+    raise ValueError(f"REALWORLD_LLM_SCREEN_RULE must be 'flag' or 'tau', got {RULE!r}")
 # Fraction of DEV unflagged functions that should pass the screen (mid of 20–30%).
 PASS_RATE = float(os.getenv("REALWORLD_LLM_SCREEN_PASS_RATE", "0.25"))
 if not 0.0 < PASS_RATE < 1.0:
@@ -87,17 +99,35 @@ def tune_tau_recall(
     }
 
 
-def gate_origin(sast_pred: int | bool, llm_score: float | None, tau: float | None) -> str | None:
-    """Return `sast`, `llm_screen`, or None (SAFE / skip Board)."""
+def gate_origin(
+    sast_pred: int | bool,
+    llm_flag: int | bool | None,
+    llm_score: float | None = None,
+    tau: float | None = None,
+) -> str | None:
+    """Return `sast`, `llm_screen`, or None (SAFE / skip Board).
+
+    Rule flag: an LLM flag passes (llm_score and tau are ignored).
+    Rule tau: llm_score must reach tau (llm_flag is ignored).
+    """
     if sast_pred:
         return "sast"
-    if ENABLED and tau is not None and llm_score is not None and float(llm_score) >= tau:
+    if not ENABLED:
+        return None
+    if RULE == "flag":
+        return "llm_screen" if llm_flag else None
+    if tau is not None and llm_score is not None and float(llm_score) >= tau:
         return "llm_screen"
     return None
 
 
-def board_candidate(sast_pred: int | bool, llm_score: float | None, tau: float | None) -> bool:
-    return gate_origin(sast_pred, llm_score, tau) is not None
+def board_candidate(
+    sast_pred: int | bool,
+    llm_flag: int | bool | None,
+    llm_score: float | None = None,
+    tau: float | None = None,
+) -> bool:
+    return gate_origin(sast_pred, llm_flag, llm_score, tau) is not None
 
 
 def load_tau() -> dict | None:
