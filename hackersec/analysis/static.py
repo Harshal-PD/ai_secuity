@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import subprocess
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -1032,6 +1033,7 @@ def _codeql_scan(
         "--format=sarif-latest", f"--output={sarif_path}",
         f"--threads={CODEQL_JOBS}",
     ]
+    started = time.monotonic()
     try:
         c_res = subprocess.run(create_cmd, capture_output=True, text=True, timeout=timeout, errors="replace")
         if c_res.returncode != 0:
@@ -1042,9 +1044,13 @@ def _codeql_scan(
             logger.warning(f"[{job_id}] CodeQL analyze exited {a_res.returncode}: {a_res.stderr[:300]}")
             return None
         sarif = json.loads(sarif_path.read_text(encoding="utf-8", errors="replace"))
-        return _parse_codeql_sarif(sarif, path_map, job_id)
+        findings = _parse_codeql_sarif(sarif, path_map, job_id)
+        logger.info(
+            f"[{job_id}] CodeQL on {len(path_map)} files: {time.monotonic() - started:.0f}s, {len(findings)} findings"
+        )
+        return findings
     except (subprocess.TimeoutExpired, OSError, json.JSONDecodeError) as e:
-        logger.warning(f"[{job_id}] CodeQL execution failed: {e}")
+        logger.warning(f"[{job_id}] CodeQL execution failed after {time.monotonic() - started:.0f}s: {e}")
         return None
 
 

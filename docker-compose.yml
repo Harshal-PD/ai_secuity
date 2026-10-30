@@ -232,6 +232,8 @@ services:
       # function = whole function, no findings; context = plus the board's context.
       # 0 disables both.
       - REALWORLD_BASELINES=${REALWORLD_BASELINES:-function,context}
+      # CodeQL: flat 25-file batches (0, default) or one database per version root (1, much slower).
+      - REALWORLD_CODEQL_TREE=${REALWORLD_CODEQL_TREE:-0}
     depends_on:
       ollama:
         condition: service_started

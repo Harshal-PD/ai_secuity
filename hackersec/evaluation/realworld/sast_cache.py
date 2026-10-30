@@ -24,6 +24,10 @@ logger = logging.getLogger(__name__)
 
 SAST_DIR = state.CACHE_DIR / "sast"
 BATCH_SIZE = int(os.getenv("REALWORLD_SAST_BATCH", "25"))
+# CodeQL runs on flat 25-file batches (what v8 and v9 ran) unless
+# REALWORLD_CODEQL_TREE=1, which builds one database per version root. Each
+# database pays a full CodeQL create + analyze, so tree mode is much slower.
+CODEQL_TREE = os.getenv("REALWORLD_CODEQL_TREE", "0").strip().lower() not in ("", "0", "false", "no", "off")
 # Version-root CodeQL databases built at the same time in tree mode.
 CODEQL_WORKERS = int(os.getenv("REALWORLD_CODEQL_WORKERS", "2"))
 TOOLS = ("semgrep", "bandit", "ast_sink", "codeql")
@@ -85,16 +89,16 @@ def _scan_codeql_flat(files: list[str]) -> dict[str, dict]:
     by_path = static.run_codeql_batch(paths, job_id="realworld") if len(paths) > 1 else None
     if by_path is not None:
         return {
-            f: {"status": "ok", "findings": _as_dicts(by_path.get(str(p.resolve()), []), f)}
+            f: {"status": "ok", "mode": "flat", "findings": _as_dicts(by_path.get(str(p.resolve()), []), f)}
             for f, p in zip(files, paths)
         }
     out = {}
     for f, p in zip(files, paths):
         res = static._run_codeql_cmd([p], "realworld")
         if res is None:
-            out[f] = {"status": "failed", "findings": []}
+            out[f] = {"status": "failed", "mode": "flat", "findings": []}
         else:
-            out[f] = {"status": "ok", "findings": _as_dicts(res, f)}
+            out[f] = {"status": "ok", "mode": "flat", "findings": _as_dicts(res, f)}
     return out
 
 
@@ -104,25 +108,30 @@ def _scan_codeql_tree(root: Path, files: list[str]) -> dict[str, dict]:
 
     findings = static.run_codeql_tree(root, job_id="realworld")
     if findings is None:
-        return {f: {"status": "failed", "findings": []} for f in files}
+        return {f: {"status": "failed", "mode": "tree", "findings": []} for f in files}
     per_file: dict[str, list[Finding]] = {}
     for fd in findings:
         per_file.setdefault(str(Path(fd.file_path).resolve()), []).append(fd)
     n = _tree_size(root)
     return {
         f: {
-            "status": "ok", "tree_files": n,
+            "status": "ok", "mode": "tree", "tree_files": n,
             "findings": _as_dicts(per_file.get(str(Path(f).resolve()), []), f),
         }
         for f in files
     }
 
 
+def _codeql_tree_active() -> bool:
+    """Per-version-root CodeQL needs the version-root layout (TREE_MODE)."""
+    return CODEQL_TREE and gitfetch.TREE_MODE
+
+
 def _scan_codeql(files: list[str]) -> dict[str, dict]:
-    """CodeQL over a batch. In tree mode each version root gets its own database
-    (two commits share relative paths, so roots must not be merged); files that
-    are not in a version root fall back to the flat batch."""
-    if not gitfetch.TREE_MODE:
+    """CodeQL over a batch: flat 25-file databases unless tree mode is on. In tree
+    mode each version root gets its own database (two commits share relative paths,
+    so roots must not be merged); files outside a version root use the flat batch."""
+    if not _codeql_tree_active():
         return _scan_codeql_flat(files)
     by_root: dict[Path, list[str]] = {}
     loose: list[str] = []
@@ -139,14 +148,18 @@ def _scan_codeql(files: list[str]) -> dict[str, dict]:
 
 
 def _codeql_stale(file: str, entry: dict, memo: dict) -> bool:
-    """A cached CodeQL result computed without the file's companions."""
+    """True when the cached CodeQL result must be recomputed: it failed, it came from
+    the other CodeQL mode, or (tree mode) companions were added to its version root.
+    Results saved before the mode tag existed are recomputed once."""
     cq = entry["codeql"]
-    if not gitfetch.TREE_MODE or cq["status"] == "unavailable":
+    if cq["status"] == "unavailable":
         return False
-    root = gitfetch.version_root_of(file)
+    if cq["status"] == "failed":
+        return True
+    root = gitfetch.version_root_of(file) if _codeql_tree_active() else None
     if root is None:
-        return False
-    return cq.get("tree_files") != _tree_size(root, memo)
+        return cq.get("mode") != "flat"
+    return cq.get("mode") != "tree" or cq.get("tree_files") != _tree_size(root, memo)
 
 
 def _scan_tool(tool: str, files: list[str]) -> dict[str, dict]:
@@ -193,13 +206,14 @@ def prescan(files: list[str], progress=None) -> dict:
     todo = [f for f in files if _load(f, signature) is None]
     logger.info(f"SAST prescan: {len(files)} files, {len(files) - len(todo)} cached, {len(todo)} to scan")
 
-    failed = _refresh_stale_codeql(files, todo, signature, progress)
+    refreshed, failed = _refresh_stale_codeql(files, todo, signature, progress)
     failed += _scan_missing(todo, signature, progress)
-    return {"files": len(files), "scanned": len(todo), "failed": failed}
+    return {"files": len(files), "scanned": len(todo), "codeql_refreshed": refreshed, "failed": failed}
 
 
-def _refresh_stale_codeql(files: list[str], todo: list[str], signature: str, progress) -> int:
-    """Re-run only CodeQL for cached files whose version root gained companions."""
+def _refresh_stale_codeql(files: list[str], todo: list[str], signature: str, progress) -> tuple[int, int]:
+    """Re-run only CodeQL for cached files whose result is stale (see _codeql_stale).
+    Returns (files re-run, re-runs that failed)."""
     memo: dict = {}
     pending = set(todo)
     stale = []
@@ -210,8 +224,8 @@ def _refresh_stale_codeql(files: list[str], todo: list[str], signature: str, pro
         if entry is not None and _codeql_stale(f, entry, memo):
             stale.append(f)
     if not stale:
-        return 0
-    logger.info(f"SAST prescan: re-running CodeQL for {len(stale)} cached files (tree mode)")
+        return 0, 0
+    logger.info(f"SAST prescan: re-running CodeQL for {len(stale)} cached files (failed or other CodeQL mode)")
     failed = 0
     for i in range(0, len(stale), BATCH_SIZE):
         chunk = stale[i : i + BATCH_SIZE]
@@ -223,7 +237,7 @@ def _refresh_stale_codeql(files: list[str], todo: list[str], signature: str, pro
             _save(f, signature, entry)
         if progress:
             progress(min(i + BATCH_SIZE, len(stale)), len(stale))
-    return failed
+    return len(stale), failed
 
 
 def _scan_missing(todo: list[str], signature: str, progress) -> int:
