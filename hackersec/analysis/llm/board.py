@@ -1,8 +1,12 @@
+import ast
 import logging
 import os
+import re
+import textwrap
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
+from hackersec.analysis.dedup import has_tool
 from hackersec.analysis.schema import Finding
 from hackersec.analysis.llm.client import (
     OllamaClient,
@@ -22,6 +26,7 @@ from hackersec.analysis.llm.parser import (
     parse_function_attacker_response,
     parse_judge_response,
     parse_llm_response,
+    parse_prosecutor_rebuttal,
     parse_vote_response,
 )
 from hackersec.analysis.llm.context import context_code
@@ -29,12 +34,16 @@ from hackersec.analysis.llm.evidence import check_sanitizer_evidence
 from hackersec.analysis.llm.function_prompter import (
     DEFENDER_CODE_CHARS,
     MIN_CODE_CHARS,
+    TRACK_LLM_SCREEN,
     build_function_attacker_prompt,
     build_function_defender_prompt,
     build_function_judge_prompt,
+    build_prosecutor_rebuttal_prompt,
     code_budget,
     fit_function_code,
+    resolve_board_track,
     synthesize_sast_attacker,
+    synthesize_screen_indictment,
 )
 
 logger = logging.getLogger(__name__)
@@ -69,6 +78,49 @@ USE_LLM_ATTACKER = os.getenv("LLM_USE_ATTACKER", "0") in ("1", "true", "True")
 #             overturned to VULNERABLE (the per-finding rule, for ablation)
 # off      -- not applied
 EVIDENCE_MODE = os.getenv("LLM_EVIDENCE_MODE", "signal").strip().lower()
+# Prior-aware adjudication. SAST-flagged candidates are ~56% vulnerable, SAST-missed
+# ones far fewer, so the two tracks do not share one conviction rule.
+#   Track 1: a CodeQL finding the Prosecutor rests on convicts without the Judge's vote.
+#   Track 2: a conviction stands only if the Prosecutor cites a real parameter and a real line.
+CODEQL_AUTOCONVICT = os.getenv("LLM_CODEQL_AUTOCONVICT", "1") not in ("0", "false", "False")
+TRACK2_STRICT = os.getenv("LLM_TRACK2_STRICT", "1") not in ("0", "false", "False")
+# Defender -> grounded Prosecutor rebuttal -> Judge. "0" restores the earlier
+# Attacker-first board (Track 1: Defender -> Judge; Track 2: Attacker -> Defender -> Judge).
+PROSECUTOR_REBUTTAL = os.getenv("LLM_PROSECUTOR_REBUTTAL", "1") not in ("0", "false", "False")
+TEMP_REBUTTAL = float(os.getenv("LLM_TEMP_REBUTTAL", "0.2"))
+
+
+def _function_params(code: str) -> set[str]:
+    """Parameter names from the function's signature (self/cls excluded)."""
+    try:
+        tree = ast.parse(textwrap.dedent(code))
+        fn = next(n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)))
+        a = fn.args
+        names = [x.arg for x in a.posonlyargs + a.args + a.kwonlyargs]
+        names += [x.arg for x in (a.vararg, a.kwarg) if x]
+    except (SyntaxError, StopIteration, ValueError):
+        header = code.split(":\n", 1)[0]
+        names = re.findall(r"[A-Za-z_]\w*", header.split("(", 1)[-1])
+    return {n for n in names if n not in ("self", "cls")}
+
+
+def _track2_cited(attacker: dict, code: str) -> bool:
+    """The Prosecutor named a real input parameter and quoted a real body line."""
+    param = (attacker.get("input_parameter") or "").strip()
+    line = (attacker.get("state_line") or "").strip()
+    if not param or not line or param not in _function_params(code):
+        return False
+    body = "\n".join(code.splitlines()[1:])  # the signature line is not a state change
+    return check_sanitizer_evidence(body, line, 0.9)["grounded"]
+
+
+def _codeql_agrees(findings: list[Finding], attacker: dict, llm_attacker: bool) -> bool:
+    """A CodeQL finding backs the Prosecutor. The default Prosecutor is the SAST
+    packet itself, so it agrees by construction; an Attacker LLM must name it."""
+    idx = [f"F{i}" for i, f in enumerate(findings, start=1) if has_tool(f, "codeql")]
+    if not idx:
+        return False
+    return (not llm_attacker) or bool(set(idx) & set(attacker.get("finding_ids") or []))
 # Answer caps for the function-level seats. A capped, unfinished JSON answer
 # is parsed as a failed vote rather than stalling a parallel slot.
 SEAT_MAX_TOKENS = 400
@@ -222,6 +274,9 @@ class AdversarialBoard:
         votes: int | None = None,
         evidence_mode: str | None = None,
         context: str = "",
+        gate_origin: str | None = None,
+        suspicion: str | None = None,
+        screen_p: float | None = None,
     ) -> dict:
         """
         One debate over a whole function and all of its candidate findings.
@@ -235,11 +290,16 @@ class AdversarialBoard:
         every seat and takes its room from the code budget; a Defender quote
         found there instead of in the function counts as grounded, with
         location "context".
+
+        `gate_origin` selects the Board track: "sast" (Track 1 — sink & taint)
+        or "llm_screen" (Track 2 — semantic invariant / missing guard). When
+        omitted, non-empty `findings` map to Track 1 and empty to Track 2.
         """
         votes = votes or JUDGE_VOTES
         mode = (evidence_mode or EVIDENCE_MODE).lower()
         if mode not in ("signal", "override", "off"):
             raise ValueError(f"evidence_mode must be signal, override or off, got {mode!r}")
+        track = resolve_board_track(gate_origin, findings)
 
         num_ctx = getattr(self.client, "num_ctx", 4096)
         focus_lines = [f.line_start for f in findings]
@@ -262,13 +322,17 @@ class AdversarialBoard:
                     usage["calls"] += 1
             return res
 
-        # 2-seat Challenger -> Defender -> Judge by default: the SAST + Joern
-        # packet is the Challenger claim for the Judge (0 Attacker LLM tokens),
-        # while the Defender argues neutralization independently with caller
-        # context (avoiding Challenger anchoring) and the Judge rules on
-        # [SAST+Joern Alert + Defender Quote + Automated Quote Check].
-        if USE_LLM_ATTACKER:
-            atk_prompt = build_function_attacker_prompt(function_name, def_code_text, findings, "")
+        # Rebuttal mode: Static Indictment (0 tokens) -> Defender -> grounded
+        # Prosecutor rebuttal -> Judge. Track 1's indictment is the SAST + Joern
+        # packet; Track 2's is the Soft LLM Screen's 1-line suspicion trace.
+        # Legacy mode: Track 1 uses the SAST packet, Track 2 an Attacker LLM.
+        use_attacker_llm = not PROSECUTOR_REBUTTAL and (USE_LLM_ATTACKER or track == TRACK_LLM_SCREEN)
+        if PROSECUTOR_REBUTTAL and track == TRACK_LLM_SCREEN:
+            attacker = synthesize_screen_indictment(suspicion, screen_p)
+        elif use_attacker_llm:
+            atk_prompt = build_function_attacker_prompt(
+                function_name, def_code_text, findings, "", track=track
+            )
             res_atk = call(atk_prompt, self.model_attacker, TEMP_ATTACKER)
             if res_atk["llm_status"] != "success":
                 return self._transport_failure(res_atk)
@@ -277,7 +341,8 @@ class AdversarialBoard:
             attacker = synthesize_sast_attacker(findings)
 
         def_prompt = build_function_defender_prompt(
-            function_name, def_code_text, findings, None, context, include_rag=False
+            function_name, def_code_text, findings, attacker if PROSECUTOR_REBUTTAL else None, context,
+            include_rag=False, track=track,
         )
         res_def = call(def_prompt, self.model_defender, TEMP_DEFENDER)
         if res_def["llm_status"] != "success":
@@ -292,8 +357,24 @@ class AdversarialBoard:
             if in_context["grounded"]:
                 evidence = {**in_context, "location": "context"}
 
+        rebuttal = None
+        if PROSECUTOR_REBUTTAL:
+            reb_prompt = build_prosecutor_rebuttal_prompt(
+                function_name, def_code_text, findings, attacker, defender, context,
+                evidence=evidence, track=track,
+            )
+            res_reb = call(reb_prompt, self.model_attacker, TEMP_REBUTTAL)
+            if res_reb["llm_status"] != "success":
+                return self._transport_failure(res_reb)
+            rebuttal = parse_prosecutor_rebuttal(res_reb["response"])
+            if track == TRACK_LLM_SCREEN:
+                # Track 2's strict citation rule reads the cites from the rebuttal.
+                attacker = {**attacker, "input_parameter": rebuttal["input_parameter"],
+                            "state_line": rebuttal["state_line"]}
+
         judge_prompt = build_function_judge_prompt(
-            function_name, code_text, findings, attacker, defender, context, evidence=evidence
+            function_name, code_text, findings, attacker, defender, context,
+            evidence=evidence, track=track, rebuttal=rebuttal,
         )
         ballots = []
         vote_temp = TEMP_JUDGE_VOTE if votes > 1 else TEMP_JUDGE
@@ -316,6 +397,16 @@ class AdversarialBoard:
         if mode == "override" and prediction == 0 and not evidence["grounded"]:
             prediction, verdict_source = 1, "evidence_rule"
 
+        if track == TRACK_LLM_SCREEN:
+            if TRACK2_STRICT and prediction == 1 and not _track2_cited(attacker, code):
+                prediction, verdict_source = 0, "track2_uncited"
+        elif (
+            CODEQL_AUTOCONVICT and prediction == 0
+            and not (rebuttal and rebuttal["patch_verified"])  # the Prosecutor itself conceded the patch
+            and _codeql_agrees(findings, attacker, use_attacker_llm)
+        ):
+            prediction, verdict_source = 1, "codeql_agrees"
+
         max_prompt = max(prompt_tokens) if prompt_tokens else None
         return {
             "llm_status": "success",
@@ -327,8 +418,11 @@ class AdversarialBoard:
             "valid_votes": len(valid),
             "attacker": attacker,
             "defender": defender,
+            "prosecutor_rebuttal": rebuttal,
             "evidence_check": evidence,
             "evidence_mode": mode,
+            "gate_origin": track,
+            "board_track": track,
             "verdict_source": verdict_source,
             "tokens": usage,
             "code_truncated": code_truncated,

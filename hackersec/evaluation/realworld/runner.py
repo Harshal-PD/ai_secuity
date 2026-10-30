@@ -7,12 +7,14 @@ Per sample:
   2. Comparison baselines (REALWORLD_BASELINES): the same model, one prompt,
      no static findings — the function alone, and the function plus the same
      context the board sees (same-file callers and callees, callers in other
-     files, framework entry point). These are not part of the shipped pipeline.
+     files, framework entry point). The LLM+context score also feeds the Soft
+     LLM Screen when REALWORLD_LLM_SCREEN=1.
   3. One Joern session for taint flows on the static findings, when there
      are any. Files static analysis did not flag skip Joern.
   4. RAG definitions for those findings.
-  5. One board debate over the static findings only. Functions with no
-     finding are predicted safe and cost no board tokens.
+  5. One board debate for union-gated candidates: SAST findings, or (when the
+     Soft LLM Screen is on) SAST-unflagged functions whose llm_context_p is at
+     or above tau_recall. Functions failing both gates are SAFE (0 board tokens).
 Fusion and calibrated thresholds are fitted on the dev split at report time.
 
 Several workers run in parallel (REALWORLD_WORKERS), spread round-robin over
@@ -36,17 +38,20 @@ import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from hackersec.evaluation.realworld import sast_cache, split, state
+from hackersec.evaluation.realworld import llm_screen, sast_cache, split, state
 
 logger = logging.getLogger(__name__)
 
-PIPELINE_VERSION = "v9-judge-repo-callers"
+PIPELINE_VERSION = "v10-soft-llm-screen"
 MIN_FREE_GB = float(os.getenv("REALWORLD_MIN_FREE_GB", "5"))
 USE_CPG = os.getenv("REALWORLD_USE_CPG", "1") not in ("0", "false", "False")
 # function = whole function, no findings; context = that plus the board's context.
-# "0" records neither. Both are baselines; the shipped system is the SAST board.
+# "0" records neither. Soft LLM Screen needs context scores when enabled.
 _BASELINE_RAW = os.getenv("REALWORLD_BASELINES", "function,context").strip().lower()
 BASELINES = set() if _BASELINE_RAW in ("", "0", "false", "off") else {p.strip() for p in _BASELINE_RAW.split(",") if p.strip()}
+if llm_screen.ENABLED and "context" not in BASELINES:
+    # Screen reuses llm_context_p; keep the context baseline on whenever the gate is on.
+    BASELINES.add("context")
 REQUIRE_GPU = os.getenv("REALWORLD_REQUIRE_GPU", "1") not in ("0", "false", "False")
 MIN_TOKENS_PER_SEC = float(os.getenv("REALWORLD_MIN_TOKENS_PER_SEC", "3"))
 # Ollama can reload a model onto CPU mid-run (e.g. after another user's job
@@ -180,6 +185,8 @@ def _board_summary(res: dict) -> dict:
             for v in votes
         ],
         "verdict_source": res.get("verdict_source"),
+        "gate_origin": res.get("gate_origin") or res.get("board_track"),
+        "board_track": res.get("board_track") or res.get("gate_origin"),
         "attacker_confidence": attacker.get("exploitability_confidence"),
         "attacker_status": attacker.get("status"),
         "attacker_finding_ids": attacker.get("finding_ids"),
@@ -242,9 +249,12 @@ def _debate_fields(res: dict | None, pred: str, override: str, p: str, share: st
 class Shared:
     """Resources every worker uses: the RAG store and the Joern servers."""
 
-    def __init__(self):
+    def __init__(self, tau_recall: float | None = None, llm_context_scores: dict | None = None):
         self.rag = None
         self.rag_lock = threading.Lock()
+        # Soft LLM Screen threshold (DEV-tuned) and optional reused llm_context_p.
+        self.tau_recall = tau_recall
+        self.llm_context_scores = llm_context_scores or {}
         try:
             from hackersec.analysis.rag import LocalRAGStore
 
@@ -369,8 +379,9 @@ class Evaluator:
             codeql_pred=int(any(has_tool(f, "codeql") for f in sast)),
         )
 
-        # Extracted once for both the SAST board and the context baseline.
-        context, repo_info = _context(sample, source, start, end) if (sast or "context" in BASELINES) else ("", None)
+        # Context for the board and the context baseline / soft screen score.
+        need_context = bool(sast) or "context" in BASELINES or llm_screen.ENABLED
+        context, repo_info = _context(sample, source, start, end) if need_context else ("", None)
         record["repo_context"] = repo_info
 
         # ── Baselines: same model, no static findings (outside the Joern lock)
@@ -380,14 +391,38 @@ class Evaluator:
                 if mode not in BASELINES:
                     continue
                 key = "llm_only" if mode == "function" else "llm_context"
+                # Soft screen: reuse llm_context_p from a prior / cached run when present.
+                cached_p = self.shared.llm_context_scores.get(sample["sample_id"]) if key == "llm_context" else None
+                requery = os.getenv("REALWORLD_LLM_SCREEN_REQUERY", "0") in ("1", "true", "True")
+                if key == "llm_context" and cached_p is not None and not requery:
+                    record[f"{key}_pred"] = int(float(cached_p) >= 0.5)
+                    record[f"{key}_p"] = float(cached_p)
+                    record[key] = {
+                        "status": "reused",
+                        "verdict": "VULNERABLE" if record[f"{key}_pred"] else "NOT_VULNERABLE",
+                    }
+                    tokens[key] = {"prompt": 0, "completion": 0, "calls": 0}
+                    continue
                 reviewed = self._baseline(sample["function"], code, start, ctx)
                 if reviewed is None:
                     return {**record, "status": "llm_failed", "error": f"{key} baseline failed",
                             "seconds": round(time.time() - started, 1)}
                 record[f"{key}_pred"] = reviewed["prediction"]
                 record[f"{key}_p"] = reviewed.get("p_vulnerable")
-                record[key] = {"status": reviewed.get("status"), "verdict": reviewed.get("verdict")}
+                record[key] = {"status": reviewed.get("status"), "verdict": reviewed.get("verdict"),
+                               "reasoning": reviewed.get("reasoning")}
                 tokens[key] = reviewed.get("tokens") or {"prompt": 0, "completion": 0, "calls": 1}
+
+        # Soft LLM Screen ∪ SAST → Board; failing both = SAFE (0 board tokens).
+        llm_p = record.get("llm_context_p")
+        if llm_p is None and sample["sample_id"] in self.shared.llm_context_scores:
+            llm_p = self.shared.llm_context_scores[sample["sample_id"]]
+            record["llm_context_p"] = llm_p
+        origin = llm_screen.gate_origin(bool(sast), llm_p, self.shared.tau_recall)
+        record["tau_recall"] = self.shared.tau_recall
+        record["gate_origin"] = origin
+        record["board_candidate"] = int(origin is not None)
+        record["llm_screen_pred"] = int(origin == "llm_screen")
 
         # ── Joern + RAG only for functions static analysis flagged ──────────
         record["cpg_status"] = "skipped"
@@ -397,11 +432,14 @@ class Evaluator:
             with self.shared.rag_lock:
                 enrich_with_rag(sast, job_id="realworld", rag=self.shared.rag)
 
-        # ── Shipped system: one debate over the static findings + context ───
+        # ── Shipped system: Board on union-gated candidates only ────────────
         res = None
-        if sast:
+        if origin is not None:
+            suspicion = ((record.get("llm_context") or {}).get("reasoning") or "").strip()
+            suspicion = suspicion.split(". ")[0][:240] if suspicion else None
             res = self._llm(lambda: self.board.deliberate_function(
-                sample["function"], code, start, sast, context=context
+                sample["function"], code, start, sast, context=context, gate_origin=origin,
+                suspicion=suspicion, screen_p=llm_p,
             ))
             if res.get("llm_status") != "success":
                 return {**record, "status": "llm_failed", "error": str(res.get("error"))[:300],
@@ -482,7 +520,24 @@ def run_evaluation(retry_failed: bool = False, limit: int | None = None) -> None
         logger.warning(f"Re-running {len(cpg_failed)} samples whose CPG step failed")
     logger.info(f"{len(samples)} samples, {len(samples) - len(todo)} already done, {len(todo)} to go; "
                 f"{WORKERS} workers over {len(ollama_urls())} Ollama and {len(joern_urls()) if USE_CPG else 0} "
-                f"Joern server(s); baselines {', '.join(sorted(BASELINES)) or 'off'}")
+                f"Joern server(s); baselines {', '.join(sorted(BASELINES)) or 'off'}"
+                f"{'; soft LLM screen on' if llm_screen.ENABLED else ''}")
+
+    # Soft LLM Screen: reuse llm_context_p from disk and tune tau_recall on DEV.
+    tau_meta = llm_screen.ensure_tau(splits, results) if llm_screen.ENABLED else None
+    tau_recall = (tau_meta or {}).get("tau_recall")
+    score_rows = llm_screen.collect_score_records(splits, results) if llm_screen.ENABLED else []
+    llm_context_scores = {
+        r["sample_id"]: float(r[llm_screen.SCORE_KEY])
+        for r in score_rows if r.get(llm_screen.SCORE_KEY) is not None
+    }
+    if llm_screen.ENABLED:
+        state.update_status(
+            llm_screen=True,
+            tau_recall=tau_recall,
+            llm_screen_scores=len(llm_context_scores),
+            llm_screen_meta=tau_meta,
+        )
 
     try:
         state.update_status(phase="sast_prescan", detail=None, done=len(samples) - len(todo), total=len(samples),
@@ -502,7 +557,7 @@ def run_evaluation(retry_failed: bool = False, limit: int | None = None) -> None
                 logger.warning(f"{missing}/{len(todo)} samples have no cached repo context; they get no "
                                "cross-file callers. Run the build phase (it needs internet) to fill the cache.")
 
-        shared = Shared()
+        shared = Shared(tau_recall=tau_recall, llm_context_scores=llm_context_scores)
         evaluators = [Evaluator(i, shared) for i in range(WORKERS)]
         checked = set()
         for ev in evaluators:
@@ -576,6 +631,7 @@ def run_evaluation(retry_failed: bool = False, limit: int | None = None) -> None
                 logger.info(
                     f"[{len(samples) - left}/{len(samples)}] {record['status']} {record.get('split')} "
                     f"label={s['label']} sast={record.get('n_findings')} "
+                    f"gate={record.get('gate_origin') or 'safe'} "
                     f"board={record.get('board_pred')} llm={record.get('llm_only_pred')} "
                     f"p={record.get('p_vulnerable')} "
                     f"({record.get('seconds')}s) {s['sample_id']}"
@@ -587,6 +643,11 @@ def run_evaluation(retry_failed: bool = False, limit: int | None = None) -> None
                 submit_next()
 
     results = state.load_results()
+    # Refresh tau_recall from whatever DEV llm_context_p the run produced (next start reuses it).
+    if llm_screen.ENABLED and not _stop:
+        tau_meta = llm_screen.ensure_tau(splits, results)
+        if tau_meta:
+            state.update_status(tau_recall=tau_meta.get("tau_recall"), llm_screen_meta=tau_meta)
     state.update_status(
         phase="stopped" if _stop else "evaluate_done",
         detail=None,

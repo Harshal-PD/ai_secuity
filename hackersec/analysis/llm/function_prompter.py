@@ -24,6 +24,25 @@ ARGUMENT_CHARS = 550
 
 _SEV_PRIOR = {"critical": 0.90, "high": 0.78, "medium": 0.62, "low": 0.42}
 
+# Board debate tracks keyed by gate origin.
+# Track 1 (sast): sink & taint verification for SAST-flagged sinks.
+# Track 2 (llm_screen): semantic invariant / missing-guard for Soft LLM Screen.
+TRACK_SAST = "sast"
+TRACK_LLM_SCREEN = "llm_screen"
+
+
+def resolve_board_track(gate_origin: str | None, findings: list[Finding] | None = None) -> str:
+    """
+    Choose Track 1 (sast) vs Track 2 (llm_screen).
+
+    Prefer an explicit gate_origin from the Soft LLM Screen / union gate when
+    present; otherwise fall back to whether the function has SAST findings.
+    """
+    origin = (gate_origin or "").strip().lower()
+    if origin in (TRACK_SAST, TRACK_LLM_SCREEN):
+        return origin
+    return TRACK_SAST if findings else TRACK_LLM_SCREEN
+
 
 def _clip(text, n: int) -> str:
     text = str(text or "").strip()
@@ -150,6 +169,79 @@ def synthesize_sast_attacker(findings: list[Finding]) -> dict:
     }
 
 
+def synthesize_screen_indictment(suspicion: str | None, p_screen: float | None = None) -> dict:
+    """Static Indictment for a Soft-LLM-Screen candidate (no SAST alert): the
+    screen's 1-line suspicion trace is the charge. 0 LLM tokens."""
+    trace = _clip(suspicion, 240) or "The LLM+context screen rated this function suspicious; no SAST alert."
+    score = f" (screen P(vulnerable)={p_screen:.2f})" if p_screen is not None else ""
+    return {
+        "finding_ids": [],
+        "vulnerability": f"Soft LLM Screen suspicion{score}: {trace}",
+        "exploit_path": trace,
+        "preconditions": "Caller or user-controlled input reaching the suspected operation without the required check",
+        "exploitability_confidence": round(float(p_screen), 4) if p_screen is not None else 0.5,
+        "status": "success",
+        "source": "llm_screen",
+    }
+
+
+def build_prosecutor_rebuttal_prompt(
+    function_name: str,
+    code_text: str,
+    findings: list[Finding],
+    indictment: dict,
+    defender: dict,
+    context: str = "",
+    evidence: dict | None = None,
+    *,
+    track: str = TRACK_SAST,
+) -> str:
+    """Grounded Prosecutor: runs after the Defender and may only verify the
+    Defender's cited guard against the Static Indictment."""
+    track = resolve_board_track(track, findings)
+    track2_fields = ""
+    track2_rule = ""
+    if track == TRACK_LLM_SCREEN:
+        track2_rule = (
+            "\n4. Also name the external input parameter of this function that the charge rests on "
+            "(input_parameter) and copy the one line inside the function that mutates state or exposes data "
+            "(state_line), character for character without the line-number prefix. Use \"\" if none exists."
+        )
+        track2_fields = '\n     "input_parameter": "parameter name or empty",\n     "state_line": "exact code line or empty",'
+    return f"""You are the PROSECUTOR on an application security review board, giving a grounded rebuttal.
+You may NOT invent a new sink or new CWE. Inspect ONLY the Static Indictment and the Defender's cited guard/caller.
+
+===== STATIC INDICTMENT =====
+Findings: {indictment.get("finding_ids") or "none (Soft LLM Screen)"}
+Charge: {_clip(indictment.get("vulnerability"), ARGUMENT_CHARS)}
+Path: {_clip(indictment.get("exploit_path"), ARGUMENT_CHARS)}
+
+===== DEFENDER'S CITED GUARD =====
+Sanitization evidence: {_clip(defender.get("sanitization_evidence"), 400)}{_format_evidence_status(evidence)}
+Mitigating controls: {_clip(defender.get("mitigating_controls"), 400)}
+Rebuttal: {_clip(defender.get("rebuttal"), ARGUMENT_CHARS)}
+
+Answer two questions in 3 sentences:
+(1) In the caller code or local guard cited by the Defender, is the tainted variable actually sanitized/authenticated on ALL paths, or does a path pass through raw?
+(2) If the function was patched, state PATCH_VERIFIED if the Defender's cited guard completely blocks the CWE.
+
+Rules:
+1. Judge only the cited guard against the indicted variable and sink. A guard that is not in the code shown does not count.
+2. raw_path is "YES" if at least one path reaches the indicted sink/operation without the guard, else "NO".
+3. patch_verified is "PATCH_VERIFIED" only if the cited guard completely blocks the CWE on every path, else "NO".{track2_rule}
+5. {_INJECTION_GUARD}
+6. Output one JSON object exactly matching this schema:
+   {{
+     "raw_path": "YES" or "NO",
+     "patch_verified": "PATCH_VERIFIED" or "NO",{track2_fields}
+     "rebuttal": "At most 3 sentences answering (1) and (2), naming the lines."
+   }}
+
+{_evidence_packet(function_name, code_text, findings, context, include_rag=False)}
+
+Respond with the JSON object only, starting with {{:"""
+
+
 def format_findings(findings: list[Finding]) -> str:
     rows = []
     for i, f in enumerate(findings, start=1):
@@ -196,13 +288,48 @@ def _evidence_packet(
 [UNTRUSTED_CODE_END]"""
 
 
-def build_function_attacker_prompt(function_name: str, code_text: str, findings: list[Finding], context: str = "") -> str:
-    return f"""You are the ATTACKER on an application security review board (Red Team).
-Automated tools flagged the function below. Argue that the function, AS WRITTEN, contains a real, exploitable security vulnerability.
+def build_function_attacker_prompt(
+    function_name: str,
+    code_text: str,
+    findings: list[Finding],
+    context: str = "",
+    *,
+    track: str = TRACK_SAST,
+) -> str:
+    track = resolve_board_track(track, findings)
+    if track == TRACK_LLM_SCREEN:
+        # Track 2 — Semantic Invariant & Missing-Guard Check (LLM-Screen Flagged)
+        duty = f"""You are the ATTACKER (Prosecutor) on an application security review board (Red Team).
+TRACK: Semantic Invariant & Missing-Guard Check. No SAST line-numbered sink is required.
+Argue that the function, AS WRITTEN, contains a real, exploitable security vulnerability.
+
+Rules:
+1. Name the privileged state change or sensitive resource in the function (e.g. authz decision, ownership mutation, file/DB write, crypto key use, dangerous call).
+2. Specify the exact missing check (e.g. missing ownership check, missing bounds check, unchecked return value, missing authz/allowlist).
+2b. Cite ONE concrete external input parameter of this function (input_parameter, its name exactly as in the signature) and ONE concrete line inside the function that mutates state or exposes data (state_line, copied character for character without the line-number prefix). Without both, your claim will not convict.
+3. Trace how a caller or attacker reaches that state change without the check. Use CONTEXT when present.
+4. Use ONLY the reference definitions to name the vulnerability class. Never cite a CWE or CVE from memory.
+5. If no real missing guard exists, say so and give a low exploitability_confidence. Overclaiming loses the debate.
+6. {_INJECTION_GUARD}
+7. Output one JSON object exactly matching this schema:
+   {{
+     "finding_ids": ["F1"],
+     "vulnerability": "Privileged state change / sensitive resource and the missing check...",
+     "exploit_path": "How the missing guard is reached...",
+     "preconditions": "What the attacker needs to reach this code...",
+     "input_parameter": "name of the external input parameter",
+     "state_line": "exact code line that mutates state or exposes data",
+     "exploitability_confidence": 0.0 to 1.0 (float)
+   }}"""
+    else:
+        # Track 1 — Sink & Taint Verification (SAST-Flagged)
+        duty = f"""You are the ATTACKER (Prosecutor) on an application security review board (Red Team).
+TRACK: Sink & Taint Verification. Automated SAST flagged an explicit sink line.
+Argue that the function, AS WRITTEN, contains a real, exploitable security vulnerability.
 
 Rules:
 1. Use the findings as leads. Name the finding id(s) your argument rests on, e.g. ["F1"].
-2. Trace concretely: which input an attacker controls, which lines it passes through, and which call it reaches. Use the data-flow lines when they exist.
+2. Prove an unbroken path from function input (parameter, request/CLI/file/env, or caller-controlled state) to the SAST-flagged sink line. Trace concretely: which input, which lines it passes through, and which sink call it reaches. Use the data-flow lines when they exist.
 3. Use ONLY the reference definitions to name the vulnerability class. Never cite a CWE or CVE from memory.
 4. If no finding is actually exploitable, say so and give a low exploitability_confidence. Overclaiming loses the debate.
 5. {_INJECTION_GUARD}
@@ -210,10 +337,12 @@ Rules:
    {{
      "finding_ids": ["F1"],
      "vulnerability": "The vulnerability class and where it is...",
-     "exploit_path": "Attacker-controlled input -> line -> line -> dangerous call...",
+     "exploit_path": "Attacker-controlled input -> line -> line -> SAST-flagged sink...",
      "preconditions": "What the attacker needs to reach this code...",
      "exploitability_confidence": 0.0 to 1.0 (float)
-   }}
+   }}"""
+
+    return f"""{duty}
 
 {_evidence_packet(function_name, code_text, findings, context)}
 
@@ -251,7 +380,10 @@ def build_function_defender_prompt(
     attacker: dict | None = None,
     context: str = "",
     include_rag: bool = False,
+    *,
+    track: str = TRACK_SAST,
 ) -> str:
+    track = resolve_board_track(track, findings)
     claim_block = ""
     if attacker:
         claim_block = f"""
@@ -260,13 +392,34 @@ Findings: {attacker.get("finding_ids") or "none named"}
 Vulnerability: {_clip(attacker.get("vulnerability"), ARGUMENT_CHARS)}
 Exploit path: {_clip(attacker.get("exploit_path"), ARGUMENT_CHARS)}
 """
-    return f"""You are the DEFENDER on an application security review board (Blue Team).
+    if track == TRACK_LLM_SCREEN:
+        # Track 2 — Semantic Invariant & Missing-Guard Check
+        duty = f"""You are the DEFENDER on an application security review board (Blue Team).
+TRACK: Semantic Invariant & Missing-Guard Check.
+Argue that the function below is NOT exploitable as written.
+{claim_block}
+Rules:
+1. Argue why the function is an internal helper (not attacker-reachable) OR why the required check is already enforced locally (or in callers shown under CONTEXT): ownership/authz checks, bounds checks, return-value handling, allowlists, early validation returns.
+2. Copy the exact code that enforces the guard into sanitization_evidence, character for character, without the line-number prefix.
+3. If no local (or shown caller) guard exists and the function is attacker-reachable, write "none found" and give a low safety_confidence. Never invent code that is not shown.
+4. {_INJECTION_GUARD}
+5. Output one JSON object exactly matching this schema:
+   {{
+     "sanitization_evidence": "exact code copied from the function, or 'none found'",
+     "mitigating_controls": "Why this is an internal helper, or call-site / framework controls...",
+     "rebuttal": "Why the missing-guard claim fails, or a concession if it is exploitable...",
+     "safety_confidence": 0.0 to 1.0 (float)
+   }}"""
+    else:
+        # Track 1 — Sink & Taint Verification
+        duty = f"""You are the DEFENDER on an application security review board (Blue Team).
+TRACK: Sink & Taint Verification.
 Argue that the function below is NOT exploitable as written, and rebut the candidate findings.
 {claim_block}
 Rules:
-1. Look for concrete neutralization in the code (or in its callers shown under CONTEXT): parameterized queries, int()/float() casts, allowlists, validation, escaping, shell=False, safe loaders, realpath/abspath+startswith, framework auto-escaping, or input that is not attacker-controlled at all.
+1. Look for local parameterization, type casting (int()/float()), allowlists, early validation returns, escaping, shell=False, safe loaders, realpath/abspath+startswith, framework auto-escaping, or input that is not attacker-controlled at all (also check callers shown under CONTEXT).
 2. Copy the exact code that neutralizes the input into sanitization_evidence, character for character, without the line-number prefix.
-3. If nothing in the code neutralizes the flagged operation, write "none found" and give a low safety_confidence. Never invent code that is not shown, and do not assume that callers not shown under CONTEXT validate the input.
+3. If nothing in the code neutralizes the flagged sink, write "none found" and give a low safety_confidence. Never invent code that is not shown, and do not assume that callers not shown under CONTEXT validate the input.
 4. {_INJECTION_GUARD}
 5. Output one JSON object exactly matching this schema:
    {{
@@ -274,7 +427,9 @@ Rules:
      "mitigating_controls": "Framework, configuration, or call-site controls that reduce risk...",
      "rebuttal": "Why the candidate finding is safe, or a concession if it is exploitable...",
      "safety_confidence": 0.0 to 1.0 (float)
-   }}
+   }}"""
+
+    return f"""{duty}
 
 {_evidence_packet(function_name, code_text, findings, context, include_rag=include_rag)}
 
@@ -289,14 +444,62 @@ def build_function_judge_prompt(
     defender: dict,
     context: str = "",
     evidence: dict | None = None,
+    *,
+    track: str = TRACK_SAST,
+    rebuttal: dict | None = None,
 ) -> str:
+    track = resolve_board_track(track, findings)
+    rebuttal_block = ""
+    if rebuttal:
+        rebuttal_block = f"""
+===== PROSECUTOR'S GROUNDED REBUTTAL (verification of the Defender's cited guard) =====
+Raw path past the guard: {"YES" if rebuttal.get("raw_path") else "NO"}
+Patch verified: {"PATCH_VERIFIED" if rebuttal.get("patch_verified") else "NO"}
+Rebuttal: {_clip(rebuttal.get("rebuttal"), ARGUMENT_CHARS)}
+Compare the Defender's claim against this specific verification; check both against the code.
+"""
+    if track == TRACK_LLM_SCREEN:
+        # Track 2 — judge on missing-guard / privileged state change
+        track_rule = (
+            "2. This case has no SAST sink alert. Vote VULNERABLE only if the Prosecutor named a real "
+            "privileged state change or sensitive resource AND the exact missing check is absent from the "
+            "function (and from callers shown under CONTEXT). Vote NOT_VULNERABLE if the function is an "
+            "internal helper not attacker-reachable, or the check is already enforced locally. "
+            "This is the stricter track: the base rate of real vulnerabilities is lower here, so convict "
+            "only if the Prosecutor cites a concrete input parameter AND a concrete state-mutating or "
+            "data-exposing line that really exist in the function."
+        )
+        flow_rule = (
+            "4. Do not require a Joern taint path; this track is about missing semantic guards, not sink taint."
+        )
+    else:
+        # Track 1 — judge on unbroken input -> sink path
+        track_rule = (
+            "2. Candidate findings are frequently false alarms. Vote VULNERABLE if input an attacker can "
+            "influence (a function parameter, request/CLI/file/env data, or state controlled by a caller) "
+            "reaches the SAST-flagged sink without neutralization along an unbroken path."
+        )
+        flow_rule = (
+            "4. If Joern data flow says no direct flow was found, treat that as inconclusive rather than "
+            "proof of safety: static CPG taint misses flows through object attributes (self.*), dicts, "
+            "callbacks, and decorators."
+        )
+
+    track2_cites = ""
+    if track == TRACK_LLM_SCREEN:
+        track2_cites = (
+            f"\nCited input parameter: {_clip(attacker.get('input_parameter'), 80) or 'none'}"
+            f"\nCited state-changing / data-exposing line: {_clip(attacker.get('state_line'), 200) or 'none'}"
+        )
+
     return f"""You are the JUDGE on an application security review board.
 Decide whether the function below, AS WRITTEN, contains an exploitable security vulnerability.
+TRACK: {"Semantic Invariant & Missing-Guard Check" if track == TRACK_LLM_SCREEN else "Sink & Taint Verification"}.
 
 ===== ATTACKER (Red Team) =====
 Findings: {attacker.get("finding_ids") or "none named"}
 Vulnerability: {_clip(attacker.get("vulnerability"), ARGUMENT_CHARS)}
-Exploit path: {_clip(attacker.get("exploit_path"), ARGUMENT_CHARS)}
+Exploit path: {_clip(attacker.get("exploit_path"), ARGUMENT_CHARS)}{track2_cites}
 Self-reported exploitability: {attacker.get("exploitability_confidence", "unstated")}
 
 ===== DEFENDER (Blue Team) =====
@@ -304,12 +507,12 @@ Sanitization evidence: {_clip(defender.get("sanitization_evidence"), 400)}{_form
 Mitigating controls: {_clip(defender.get("mitigating_controls"), 400)}
 Rebuttal: {_clip(defender.get("rebuttal"), ARGUMENT_CHARS)}
 Self-reported safety: {defender.get("safety_confidence", "unstated")}
-
+{rebuttal_block}
 Rules:
 1. Decide from the code itself. The arguments are aids; neither side's rhetoric or confidence numbers decide the case.
-2. Candidate findings are frequently false alarms. A finding makes the function vulnerable if input an attacker can influence (a function parameter, request/CLI/file/env data, or state controlled by a caller) can reach the flagged operation without being neutralized.
-3. A defence counts only if the neutralizing code is really present in the function shown (or in a caller shown under CONTEXT) and verified by the Automated quote check above. Do NOT assume that callers not shown validate or sanitize arguments before calling this function.
-4. If Joern data flow says no direct flow was found, treat that as inconclusive rather than proof of safety: static CPG taint misses flows through object attributes (self.*), dicts, callbacks, and decorators.
+{track_rule}
+3. A defence counts only if the neutralizing / guarding code is really present in the function shown (or in a caller shown under CONTEXT) and verified by the Automated quote check above. Do NOT assume that callers not shown validate or sanitize arguments before calling this function.
+{flow_rule}
 5. Report calibrated confidence in your verdict: 0.5 means genuinely unsure, 0.9 means you would bet heavily. Do not inflate it.
 6. Use ONLY the reference definitions for the vulnerability class. Never cite a CWE or CVE from memory.
 7. {_INJECTION_GUARD}

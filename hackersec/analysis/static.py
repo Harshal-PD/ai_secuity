@@ -117,7 +117,9 @@ def _semgrep_configs() -> list[str]:
 def rules_signature() -> str:
     """Identifies the exact rule set, so cached scan results are reused only
     while the rules are unchanged."""
-    h = hashlib.sha1(b"v7.1-precision-ast-low-codeql")
+    # The wide AST gate changes what ast_sink reports, so it gets its own cache
+    # generation; with it off the old key is kept and old cache entries are reused.
+    h = hashlib.sha1(b"v7.2-ast-surface-param-taint" if ENABLE_AST_WIDE else b"v7.1-precision-ast-low-codeql")
     for cfg in _semgrep_configs():
         p = Path(cfg)
         h.update(p.read_bytes() if p.is_file() else cfg.encode())
@@ -329,6 +331,9 @@ import shutil
 import tempfile
 
 ENABLE_AST_SINKS = os.getenv("SAST_ENABLE_AST_SINKS", "1") not in ("0", "false", "False")
+# Wide mode: security-surface presence flags plus parameter taint through string
+# formatting. SAST_AST_PARAM_TAINT=0 restores the narrow sink list.
+ENABLE_AST_WIDE = os.getenv("SAST_AST_PARAM_TAINT", "1") not in ("0", "false", "False")
 
 _AST_INPUT_ATTRS = {
     "args", "form", "values", "GET", "POST", "cookies", "headers",
@@ -423,6 +428,171 @@ def _has_raise_or_return(stmts: list[ast.stmt]) -> bool:
             if isinstance(sub, (ast.Raise, ast.Return)):
                 return True
     return False
+
+
+# ── Wide mode ───────────────────────────────────────────────────────────────
+# 1. Security surface: a call whose name says it touches a database, shell,
+#    HTTP client, deserializer, file path, template, token or permission is
+#    flagged by presence alone (low severity, once per kind per function).
+# 2. Parameter taint: a parameter-derived value is built into a string
+#    (f-string, %, .format(), +) and then passed to an external call.
+
+_CAMEL_WORD = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\d+")
+
+# (kind, CWE, OWASP, word prefixes, exact words). A call name is split into
+# words (`run_shell`, `executeQuery`, `os.popen`) and the first kind with a
+# matching word wins. Prefixes keep `load` from matching `download`/`payload`.
+_SURFACE_KINDS = (
+    ("sql", "CWE-89", "A03:2021", ("sql", "query", "execute", "fetchall", "fetchone", "fetchmany"), ()),
+    ("shell", "CWE-78", "A03:2021", ("cmd", "shell", "popen"), ()),
+    ("code", "CWE-94", "A03:2021", (), ("eval", "exec", "execfile")),
+    ("deser", "CWE-502", "A08:2021", ("deserialize", "load", "pickle", "unpickle", "yaml"), ()),
+    ("path", "CWE-22", "A01:2021", ("extract",), ()),
+    ("render", "CWE-79", "A03:2021", ("render",), ()),
+    ("http", "CWE-918", "A10:2021", ("request", "fetch", "urlopen", "urlretrieve"), ()),
+    ("auth", "CWE-287", "A07:2021", ("jwt", "token", "password"), ()),
+    ("perm", "CWE-732", "A01:2021", ("chmod",), ()),
+)
+_SURFACE_PATH = ("path", "CWE-22", "A01:2021")
+_SURFACE_PATH_CALLS = {
+    "open", "io.open", "codecs.open", "os.open",
+    "os.path.join", "posixpath.join", "ntpath.join",
+}
+_SURFACE_PATH_LEAVES = {"Path", "PurePath", "PosixPath", "WindowsPath", "joinpath"}
+_JSON_LIBS = {"json", "simplejson", "ujson", "orjson"}
+_SURFACE_WHAT = {
+    "sql": "database access", "shell": "shell/command execution", "code": "dynamic code execution",
+    "deser": "deserialization", "path": "file path handling", "render": "template rendering",
+    "http": "outbound HTTP request", "auth": "authentication token/credential handling",
+    "perm": "file permission change",
+}
+
+# Calls that stay inside the function or only log/raise: formatting a
+# parameter into these is not a flow into an external call.
+_AST_BENIGN_CALLS = frozenset({
+    "print", "len", "str", "int", "float", "bool", "repr", "bytes", "bytearray", "list", "dict", "set",
+    "tuple", "frozenset", "sorted", "reversed", "min", "max", "sum", "any", "all", "range", "enumerate",
+    "zip", "map", "filter", "isinstance", "issubclass", "hasattr", "getattr", "setattr", "type", "id",
+    "hash", "format", "ord", "chr", "round", "abs", "super", "iter", "next", "vars", "dir", "callable",
+    "ascii", "bin", "hex", "oct", "abort", "_", "gettext", "ngettext", "lazy_gettext",
+})
+_AST_BENIGN_METHODS = frozenset({
+    "format", "join", "append", "extend", "insert", "add", "update", "get", "pop", "setdefault", "remove",
+    "discard", "split", "rsplit", "splitlines", "strip", "lstrip", "rstrip", "replace", "startswith",
+    "endswith", "lower", "upper", "title", "capitalize", "encode", "decode", "items", "keys", "values",
+    "copy", "index", "count", "find", "rfind", "write", "writelines", "flush",
+    "debug", "info", "warning", "warn", "error", "exception", "critical", "fatal", "log",
+})
+_AST_EXC_SUFFIXES = ("Error", "Exception", "Warning")
+
+
+def _call_words(cname: str) -> list[str]:
+    parts = cname.split(".")
+    words: list[str] = []
+    for i, part in enumerate(parts):
+        if part == "request" and i < len(parts) - 1:
+            continue  # the framework request object (`request.args.get`), not an HTTP call
+        for chunk in part.split("_"):
+            words.extend(w.lower() for w in _CAMEL_WORD.findall(chunk))
+    return words
+
+
+def _surface_kind(cname: str, leaf: str) -> tuple[str, str, str] | None:
+    """(kind, CWE, OWASP) when the call name is on the security surface."""
+    if not cname:
+        return None
+    words = _call_words(cname)
+    root = cname.split(".")[0]
+    for kind, cwe, owasp, prefixes, exact in _SURFACE_KINDS:
+        if kind == "deser" and root in _JSON_LIBS:
+            continue  # JSON cannot execute code on load
+        if any(w in exact or w.startswith(prefixes) for w in words):
+            return kind, cwe, owasp
+    if (
+        cname in _SURFACE_PATH_CALLS
+        or cname.startswith("pathlib.")
+        or leaf in _SURFACE_PATH_LEAVES
+        or "send_file" in cname.lower()
+    ):
+        return _SURFACE_PATH
+    return None
+
+
+def _is_external_call(func: ast.AST, leaf: str) -> bool:
+    if leaf.endswith(_AST_EXC_SUFFIXES) or leaf.startswith(("assert", "_assert")):
+        return False
+    if isinstance(func, ast.Name):
+        return leaf not in _AST_BENIGN_CALLS
+    if isinstance(func, ast.Attribute):
+        return leaf not in _AST_BENIGN_METHODS
+    return False
+
+
+def _is_strish(expr: ast.AST, str_vars: set[str]) -> bool:
+    """An operand known to be a string: literal, f-string, formatted
+    expression, or a variable already holding one."""
+    if isinstance(expr, ast.Constant):
+        return isinstance(expr.value, str)
+    if isinstance(expr, ast.JoinedStr):
+        return True
+    if isinstance(expr, ast.Name):
+        return expr.id in str_vars
+    return _is_str_format(expr, str_vars)
+
+
+def _is_str_format(expr: ast.AST, str_vars: set[str]) -> bool:
+    """f"..{x}", "..%s" % x, "..{}".format(x), or "..." + x."""
+    if isinstance(expr, ast.JoinedStr):
+        return any(isinstance(v, ast.FormattedValue) for v in expr.values)
+    if isinstance(expr, ast.BinOp):
+        if isinstance(expr.op, ast.Mod):
+            return _is_strish(expr.left, str_vars)
+        if isinstance(expr.op, ast.Add):
+            return _is_strish(expr.left, str_vars) or _is_strish(expr.right, str_vars)
+        return False
+    return isinstance(expr, ast.Call) and isinstance(expr.func, ast.Attribute) and expr.func.attr == "format"
+
+
+def _formats_taint(expr: ast.AST, taint: set[str], formatted: dict[str, int], guarded: set[str]) -> bool:
+    if _calls_guard(expr):
+        return False
+    names = _names_in(expr)
+    return bool((names & taint) or (names & (set(formatted) - guarded)) or _has_input_source(expr))
+
+
+def _track_formatted_strings(
+    fn: ast.AST,
+    taint: set[str],
+    guarded: set[str],
+    str_vars: set[str],
+    formatted: dict[str, int],
+) -> None:
+    """Fills `str_vars` (variables holding a string) and `formatted` (variables
+    built by formatting a parameter-derived value, with the line where that
+    happened). Assignments are read in source order, so a call only sees
+    formatting that came before it."""
+    assigns = [n for n in ast.walk(fn) if isinstance(n, (ast.Assign, ast.AugAssign))]
+    for node in sorted(assigns, key=lambda n: (n.lineno, n.col_offset)):
+        if isinstance(node, ast.Assign):
+            targets = [t.id for t in node.targets if isinstance(t, ast.Name)]
+            built = _is_str_format(node.value, str_vars)
+            if built or _is_strish(node.value, str_vars):
+                str_vars.update(targets)
+            tainted_build = built and _formats_taint(node.value, taint, formatted, guarded)
+            for t in targets:
+                if tainted_build and t not in guarded:
+                    formatted.setdefault(t, node.lineno)
+                elif not built:
+                    formatted.pop(t, None)
+        elif isinstance(node.target, ast.Name) and isinstance(node.op, ast.Add):
+            t = node.target.id
+            if (
+                (t in str_vars or _is_strish(node.value, str_vars))
+                and t not in guarded
+                and _formats_taint(node.value, taint, formatted, guarded)
+            ):
+                str_vars.add(t)
+                formatted.setdefault(t, node.lineno)
 
 
 def _scan_ast_function(
@@ -522,6 +692,18 @@ def _scan_ast_function(
             )
         )
 
+    str_vars: set[str] = set()
+    formatted_vars: dict[str, int] = {}
+    surface_seen: set[str] = set()
+    if ENABLE_AST_WIDE:
+        _track_formatted_strings(fn, active_taint, guarded_vars, str_vars, formatted_vars)
+
+    def formatted_flow(expr: ast.AST, call_line: int) -> bool:
+        """The argument is a string built from a parameter-derived value, on or before this call."""
+        if isinstance(expr, ast.Name):
+            return expr.id in formatted_vars and formatted_vars[expr.id] <= call_line and expr.id not in guarded_vars
+        return _is_str_format(expr, str_vars) and _formats_taint(expr, active_taint, formatted_vars, guarded_vars)
+
     for node in ast.walk(fn):
         if not isinstance(node, ast.Call):
             continue
@@ -612,6 +794,49 @@ def _scan_ast_function(
                 emit(
                     line, end_line, "HS-AST-SQLI", "high", "CWE-89", "A03:2021",
                     f"Dynamic SQL query constructed from unguarded parameter in `.{node.func.attr}()`.",
+                )
+
+    # Wide mode runs as a second pass so every narrow rule above fires exactly as
+    # before; it only adds findings, and skips lines a narrow rule already covered.
+    if ENABLE_AST_WIDE:
+        narrow_lines = {l for l, _ in seen_lines}
+        raised = {id(n.exc) for n in ast.walk(fn) if isinstance(n, ast.Raise) and isinstance(n.exc, ast.Call)}
+        for node in ast.walk(fn):
+            if not isinstance(node, ast.Call) or id(node) in raised:
+                continue
+            cname = _call_name(node.func)
+            leaf = cname.split(".")[-1]
+            line = getattr(node, "lineno", fn.lineno)
+            end_line = getattr(node, "end_lineno", line) or line
+            if line in narrow_lines:
+                continue
+            arg_nodes = list(node.args) + [kw.value for kw in node.keywords if kw.value is not None]
+            surface = _surface_kind(cname, leaf)
+            kind = surface[0] if surface else None
+            flows = (
+                _is_external_call(node.func, leaf)
+                and (kind or not leaf.startswith("_"))  # unnamed internal helpers are not external
+                and not any(_calls_guard(a) for a in arg_nodes)
+                and any(formatted_flow(a, line) for a in arg_nodes)
+                and not (kind == "path" and has_path_guard)
+                and not (kind == "http" and has_url_guard)
+            )
+            if flows:
+                cwe, owasp = (surface[1], surface[2]) if surface else ("CWE-74", "A03:2021")
+                severity = "high" if kind in ("sql", "shell", "code") else (
+                    "medium" if kind or has_explicit_source else "low"
+                )
+                emit(
+                    line, end_line, "HS-AST-PARAM-TAINT", severity, cwe, owasp,
+                    f"Parameter-derived value is built into a string by formatting (f-string, %, .format() or +) "
+                    f"and passed to `{cname}` with no validation or escaping in this function.",
+                )
+            elif surface and kind not in surface_seen:
+                surface_seen.add(kind)
+                emit(
+                    line, end_line, f"HS-AST-SURFACE-{kind.upper()}", "low", surface[1], surface[2],
+                    f"Security-surface match: `{cname}` is {_SURFACE_WHAT[kind]}. Flagged by name only; "
+                    f"no tainted flow into it was established.",
                 )
 
     return findings

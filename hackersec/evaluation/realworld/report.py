@@ -106,7 +106,7 @@ COST_BUCKET = {
 }
 COST_LABELS = {
     "sast": "Static Gate (no LLM)",
-    "board": "SAST board (LLM only where static analysis flagged)",
+    "board": "Board (SAST ∪ Soft LLM Screen when enabled)",
     "llm_only": "LLM only, whole function, no SAST",
     "llm_context": "LLM only + same-file context, no SAST",
 }
@@ -124,13 +124,19 @@ def _prepare(results: dict, pairs: dict, static_check: dict | None = None) -> li
         r["split"] = r.get("split") or meta.get("split")
         r["clean"] = meta.get("clean", r.get("clean"))
         r["dataset_static_check"] = (static_check or {}).get(r["sample_id"])
-        r["flagged"] = (r.get("n_findings") or 0) > 0
+        r["flagged"] = (r.get("n_findings") or 0) > 0  # SAST gate (sast_flagged view)
+        # Soft LLM Screen ∪ SAST: Board ran when gate_origin is sast/llm_screen.
+        # Legacy rows (no gate_origin key) used the SAST-only gate.
+        if "gate_origin" in r:
+            r["board_ran"] = r.get("gate_origin") in ("sast", "llm_screen")
+        else:
+            r["board_ran"] = r["flagged"]
         r["flag_all_pred"] = 1
         r["family"] = families.family(r.get("cwe"))
         r["family_group"] = families.group(r.get("cwe"))
         r["sast_score"] = 1.0 if r["flagged"] else None
         if "pipeline" in r:
-            def score(value, flagged=r["flagged"], pred=r.get("board_pred")):
+            def score(value, flagged=r["board_ran"], pred=r.get("board_pred")):
                 return (float(value) if value is not None else float(pred)) if flagged else None
 
             r["vote_score"] = score(r.get("vote_share"))
@@ -205,6 +211,18 @@ def _calibrate(rows: list[dict]) -> dict:
             if t is not None:
                 for r in rows:
                     r[pred_key] = int(r[score_key] is not None and r[score_key] >= t)
+
+    # Soft LLM Screen: persist / refresh tau_recall from DEV unflagged llm_context_p.
+    from hackersec.evaluation.realworld import llm_screen
+
+    if llm_screen.ENABLED and rows and any(r.get("llm_context_p") is not None for r in rows):
+        screen = llm_screen.tune_tau_recall(dev) or llm_screen.load_tau()
+        if screen:
+            out["tau_recall"] = screen.get("tau_recall")
+            out["llm_screen"] = screen
+            llm_screen.save_tau(screen)
+    elif any(r.get("tau_recall") is not None for r in rows):
+        out["tau_recall"] = next(r["tau_recall"] for r in rows if r.get("tau_recall") is not None)
     return out
 
 
@@ -894,6 +912,14 @@ def _markdown(report: dict) -> str:
     if cal.get("llm_context_threshold") is not None:
         L.append(f"- LLM-only + context threshold on P(vulnerable): **{cal['llm_context_threshold']:.3f}** "
                  f"(max {objective} on dev)")
+    if cal.get("tau_recall") is not None:
+        screen = cal.get("llm_screen") or {}
+        L.append(
+            f"- Soft LLM Screen τ_recall on llm_context_p: **{cal['tau_recall']:.3f}** "
+            f"(top ~{100 * (screen.get('pass_rate_target') or 0.25):.0f}% of DEV SAST-unflagged; "
+            f"achieved {100 * (screen.get('pass_rate_achieved') or 0):.1f}% of "
+            f"{screen.get('n_dev_unflagged_scored', '?')} functions)"
+        )
     L += ["", "Each pair contributes one vulnerable and one fixed function, so flagging every function scores "
           "F1 0.667, accuracy 0.5 and MCC 0 (the trivial reference row). MCC, accuracy and the pairwise "
           "columns show whether a system actually separates vulnerable from fixed code.", ""]
@@ -1112,6 +1138,9 @@ def build_report(write: bool = True) -> dict:
         "context_chars": os.getenv("LLM_CONTEXT_CHARS", "1200"),
         "repo_context": repo_snapshot.VERSION if has_repo_context else None,
         "repo_context_chars": os.getenv("LLM_REPO_CONTEXT_CHARS", "800") if has_repo_context else None,
+        "llm_screen": os.getenv("REALWORLD_LLM_SCREEN", "1"),
+        "llm_screen_pass_rate": os.getenv("REALWORLD_LLM_SCREEN_PASS_RATE", "0.25"),
+        "tau_recall": calibration.get("tau_recall"),
     })
 
     # Keep the dashboard chart working: baseline vs HackerSec, end-to-end, test.

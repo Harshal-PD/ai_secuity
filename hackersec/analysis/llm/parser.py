@@ -153,6 +153,32 @@ def parse_function_attacker_response(raw_text: str) -> dict:
         "exploit_path": str(data.get("exploit_path", "No exploit path submitted.")),
         "preconditions": str(data.get("preconditions", "None stated.")),
         "exploitability_confidence": _bounded_float(data.get("exploitability_confidence", 0.0)),
+        # Track 2 only: the concrete input and the concrete state-changing / data-exposing line.
+        "input_parameter": str(data.get("input_parameter") or "").strip(),
+        "state_line": str(data.get("state_line") or "").strip(),
+    }
+
+
+def _yes(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().upper().replace(" ", "_") in ("YES", "TRUE", "1", "RAW", "PATCH_VERIFIED")
+
+
+def parse_prosecutor_rebuttal(raw_text: str) -> dict:
+    """Grounded Prosecutor rebuttal of the Defender's cited guard. Never raises.
+    An unparseable rebuttal claims nothing: no raw path, no patch verification."""
+    data = _extract_json(raw_text)
+    if data is None:
+        return {"status": "failed_parsing", "raw_path": False, "patch_verified": False,
+                "rebuttal": "Prosecutor rebuttal unparseable.", "input_parameter": "", "state_line": ""}
+    return {
+        "status": "success",
+        "raw_path": _yes(data.get("raw_path")),
+        "patch_verified": _yes(data.get("patch_verified")),
+        "rebuttal": str(data.get("rebuttal", "No rebuttal submitted."))[:800],
+        "input_parameter": str(data.get("input_parameter") or "").strip(),
+        "state_line": str(data.get("state_line") or "").strip(),
     }
 
 
