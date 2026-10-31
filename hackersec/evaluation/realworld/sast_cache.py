@@ -31,6 +31,11 @@ CODEQL_TREE = os.getenv("REALWORLD_CODEQL_TREE", "0").strip().lower() not in (""
 # Version-root CodeQL databases built at the same time in tree mode.
 CODEQL_WORKERS = int(os.getenv("REALWORLD_CODEQL_WORKERS", "2"))
 TOOLS = ("semgrep", "bandit", "ast_sink", "codeql")
+# Only these three decide whether a function is SAST-flagged. The AST sink
+# scanner is scanned and cached with them but runs as an enrichment stage after
+# the gate (or the Soft LLM Screen) flags a function, next to Joern and RAG.
+GATE_TOOLS = ("semgrep", "bandit", "codeql")
+ENRICH_TOOLS = tuple(t for t in TOOLS if t not in GATE_TOOLS)
 
 
 @lru_cache(maxsize=1)
@@ -268,3 +273,23 @@ def findings_for(file: str) -> tuple[list[Finding], dict]:
 
     findings = [Finding(**d) for t in TOOLS for d in entry[t]["findings"]]
     return dedup_findings(findings), {t: entry[t]["status"] for t in TOOLS}
+
+
+def split_findings_for(file: str) -> tuple[list[Finding], list[Finding], dict]:
+    """(gate findings, AST enrichment findings, each tool's status) for one file.
+
+    Gate findings come from Semgrep, Bandit and CodeQL only, deduplicated among
+    themselves, so an AST hit can neither flag a function nor be merged into
+    the message of a gate finding. AST findings are kept separate for the
+    enrichment stage."""
+    signature = _signature()
+    entry = _load(file, signature)
+    if entry is None:
+        prescan([file])
+        entry = _load(file, signature)
+    if entry is None:
+        return [], [], {t: "failed" for t in TOOLS}
+
+    gate = [Finding(**d) for t in GATE_TOOLS for d in entry[t]["findings"]]
+    enrich = [Finding(**d) for t in ENRICH_TOOLS for d in entry[t]["findings"]]
+    return dedup_findings(gate), dedup_findings(enrich), {t: entry[t]["status"] for t in TOOLS}

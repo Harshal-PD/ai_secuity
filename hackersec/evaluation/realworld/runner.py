@@ -2,15 +2,18 @@
 Run the SAST-gated pipeline over every sample, fully offline.
 
 Per sample:
-  1. Semgrep + Bandit on the whole file (cached; batched before the loop),
-     keeping findings inside the target function.
+  1. Semgrep + Bandit + CodeQL on the whole file (cached; batched before the
+     loop), keeping findings inside the target function. These three are the
+     static gate. The AST sink scanner is cached with them but only enriches.
   2. Comparison baselines (REALWORLD_BASELINES): the same model, one prompt,
      no static findings — the function alone, and the function plus the same
      context the board sees (same-file callers and callees, callers in other
      files, framework entry point). The LLM+context score also feeds the Soft
      LLM Screen when REALWORLD_LLM_SCREEN=1.
-  3. One Joern session for taint flows on the static findings, when there
-     are any. Files static analysis did not flag skip Joern.
+  3. For every Board candidate (flagged by the gate or the Soft LLM Screen):
+     AST sink leads are merged in (a screen candidate with none gets a
+     whole-function lead), then one Joern session finds taint flows on those
+     findings. Functions neither flagged skip Joern.
   4. RAG definitions for those findings.
   5. One board debate for union-gated candidates: SAST findings, or (when the
      Soft LLM Screen is on) SAST-unflagged functions the context baseline flags as
@@ -39,12 +42,12 @@ import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from hackersec.evaluation.realworld import llm_screen, sast_cache, split, state
+from hackersec.evaluation.realworld import enrich_stage, llm_screen, sast_cache, split, state
 from hackersec.evaluation.realworld.gitfetch import TREE_MODE, version_root_of
 
 logger = logging.getLogger(__name__)
 
-PIPELINE_VERSION = "v10-soft-llm-screen"
+PIPELINE_VERSION = "v11-gate-enrich-board"
 MIN_FREE_GB = float(os.getenv("REALWORLD_MIN_FREE_GB", "5"))
 USE_CPG = os.getenv("REALWORLD_USE_CPG", "1") not in ("0", "false", "False")
 # function = whole function, no findings; context = that plus the board's context.
@@ -371,14 +374,18 @@ class Evaluator:
         start, end = sample["line_start"], sample["line_end"]
         code = "\n".join(source.splitlines()[start - 1 : end])
 
-        file_findings, sast_status = sast_cache.findings_for(sample["file"])
-        sast = [copy.deepcopy(f) for f in file_findings if _in_function(f, sample)]
+        # The gate is Semgrep + Bandit + CodeQL. AST sink findings are kept apart
+        # and only enrich a function something else already flagged.
+        gate_all, ast_all, sast_status = sast_cache.split_findings_for(sample["file"])
+        sast = [copy.deepcopy(f) for f in gate_all if _in_function(f, sample)]
+        ast_leads = [copy.deepcopy(f) for f in ast_all if _in_function(f, sample)]
         record.update(
-            file_findings=len(file_findings), n_findings=len(sast), sast_status=sast_status,
+            file_findings=len(gate_all), n_findings=len(sast), n_ast_findings=len(ast_leads),
+            sast_status=sast_status,
             sast_pred=int(bool(sast)),
             semgrep_pred=int(any(has_tool(f, "semgrep") for f in sast)),
             bandit_pred=int(any(has_tool(f, "bandit") for f in sast)),
-            ast_pred=int(any(has_tool(f, "ast_sink") for f in sast)),
+            ast_pred=int(bool(ast_leads)),
             codeql_pred=int(any(has_tool(f, "codeql") for f in sast)),
         )
 
@@ -429,21 +436,25 @@ class Evaluator:
         record["board_candidate"] = int(origin is not None)
         record["llm_screen_pred"] = int(origin == "llm_screen")
 
-        # ── Joern + RAG only for functions static analysis flagged ──────────
+        # ── Enrichment: AST leads -> Joern taint -> RAG, for every Board candidate
+        # (flagged by the static gate or by the Soft LLM Screen). Functions
+        # neither flagged skip all of it.
+        suspicion = ((record.get("llm_context") or {}).get("reasoning") or "").strip()
+        suspicion = suspicion.split(". ")[0][:240] if suspicion else None
+        active = enrich_stage.active_findings(origin, sast, ast_leads, sample, suspicion)
+        record["n_active_findings"] = len(active)
         record["cpg_status"] = "skipped"
-        if self.joern is not None and sast:
-            record["cpg_status"] = self._cpg(sample, sast, None, method_line=start)
-        if self.shared.rag is not None and sast:
+        if self.joern is not None and active:
+            record["cpg_status"] = self._cpg(sample, active, None, method_line=start)
+        if self.shared.rag is not None and active:
             with self.shared.rag_lock:
-                enrich_with_rag(sast, job_id="realworld", rag=self.shared.rag)
+                enrich_with_rag(active, job_id="realworld", rag=self.shared.rag)
 
         # ── Shipped system: Board on union-gated candidates only ────────────
         res = None
         if origin is not None:
-            suspicion = ((record.get("llm_context") or {}).get("reasoning") or "").strip()
-            suspicion = suspicion.split(". ")[0][:240] if suspicion else None
             res = self._llm(lambda: self.board.deliberate_function(
-                sample["function"], code, start, sast, context=context, gate_origin=origin,
+                sample["function"], code, start, active, context=context, gate_origin=origin,
                 suspicion=suspicion, screen_p=llm_p,
             ))
             if res.get("llm_status") != "success":
@@ -451,7 +462,7 @@ class Evaluator:
                         "seconds": round(time.time() - started, 1)}
             tokens["board"] = res.get("tokens") or tokens["board"]
         record.update(_debate_fields(res, "board_pred", "board_override_pred", "p_vulnerable", "vote_share", "board"))
-        record["findings"] = [_finding_summary(f) for f in sast]
+        record["findings"] = [_finding_summary(f) for f in active]
         record["context_chars"] = len(context)
         record["tokens"] = tokens
 

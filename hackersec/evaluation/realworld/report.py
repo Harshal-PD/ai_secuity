@@ -44,10 +44,10 @@ PREVALENCES = tuple(float(x) for x in os.getenv("REALWORLD_PREVALENCE", "0.05,0.
 
 SYSTEM_LABELS = {
     "flag_all": "Flag every function (trivial reference)",
-    "sast": "Semgrep + Bandit + AST Gate",
+    "sast": "Static gate (Semgrep + Bandit + CodeQL)",
     "semgrep": "Semgrep alone",
     "bandit": "Bandit alone",
-    "ast_sink": "AST sink gate alone",
+    "ast_sink": "AST sink scanner alone (enrichment, not part of the gate)",
     "codeql": "CodeQL alone",
     "board": "SAST board: Judge vote",
     "board_override": "SAST board + evidence override (ablation)",
@@ -173,7 +173,10 @@ def _calibrate(rows: list[dict]) -> dict:
         return out
 
     labels = [r["label"] for r in dev]
-    threshold = fusion.best_threshold([r["p_score"] for r in dev], labels) if dev else None
+    threshold = fusion.best_threshold(
+        [r["p_score"] for r in dev], labels,
+        min_precision=fusion.BOARD_MIN_PRECISION, min_threshold=fusion.BOARD_MIN_THRESHOLD,
+    ) if dev else None
     out["board_threshold"] = threshold
     if threshold is not None:
         for r in rows:
@@ -188,7 +191,10 @@ def _calibrate(rows: list[dict]) -> dict:
             r["fusion_pred"] = model.predict(r)
 
     if all("full_p_score" in r for r in rows):
-        threshold = fusion.best_threshold([r["full_p_score"] for r in dev], labels) if dev else None
+        threshold = fusion.best_threshold(
+            [r["full_p_score"] for r in dev], labels,
+            min_precision=fusion.BOARD_MIN_PRECISION, min_threshold=fusion.BOARD_MIN_THRESHOLD,
+        ) if dev else None
         out["full_threshold"] = threshold
         if threshold is not None:
             for r in rows:
@@ -485,8 +491,13 @@ def _telemetry(rows: list[dict]) -> dict:
         out["semgrep_failed_rate"] = _rate(with_status, lambda r: r["sast_status"].get("semgrep") != "ok")
         out["bandit_failed_rate"] = _rate(with_status, lambda r: r["sast_status"].get("bandit") != "ok")
 
-    if any(r.get("board") for r in flagged):
-        out["function_board"] = _board_telemetry(flagged, "board", "board_pred", "board_override_pred")
+    # Every function the Board ran on: SAST-gated and Soft-LLM-Screen candidates.
+    board_ran = [r for r in rows if r["board_ran"]]
+    if any(r.get("board") for r in board_ran):
+        out["function_board"] = _board_telemetry(board_ran, "board", "board_pred", "board_override_pred")
+        origins = Counter(r.get("gate_origin") for r in board_ran if r.get("gate_origin"))
+        if origins:
+            out["function_board"]["gate_origins"] = dict(sorted(origins.items()))
     elif fs:
         out["per_finding_board"] = {
             "judge_false_positive_rate": _rate(fs, lambda f: f.get("judge_verdict") == "FALSE_POSITIVE"),
@@ -1065,8 +1076,10 @@ def build_report(write: bool = True) -> dict:
             "commit is vulnerable before the fix and fixed after it. Tangled commits "
             "(> REALWORLD_MAX_FUNCS_PER_COMMIT functions) are excluded; the clean subset further keeps only "
             "commits that changed a single function.",
-            "The SAST board only reasons about Semgrep and Bandit findings, so its recall cannot exceed theirs. "
-            "The sast_flagged view isolates what the board adds on the functions it is asked to review.",
+            "The static gate is Semgrep, Bandit and CodeQL (v11 onward; earlier runs also counted the AST sink "
+            "scanner). A function reaches the Board when the gate flags it or the Soft LLM Screen does; the AST "
+            "scanner, Joern and RAG then enrich the findings for both. The sast_flagged view isolates what the "
+            "board adds on the functions the static gate flagged.",
             "The LLM-only rows ask the same model once, with no static findings: the function alone, and the "
             "function plus the context the board sees. They are comparison baselines, not part of the shipped "
             "pipeline. They never see the dataset label or CWE. "

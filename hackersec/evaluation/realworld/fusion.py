@@ -48,6 +48,14 @@ CALIBRATION_METRIC = os.getenv("REALWORLD_CALIBRATE_METRIC", "mcc").strip().lowe
 if CALIBRATION_METRIC not in ("mcc", "balanced_accuracy", "f1", "f0.5"):
     raise ValueError(f"REALWORLD_CALIBRATE_METRIC must be mcc, balanced_accuracy, f1 or f0.5, got {CALIBRATION_METRIC!r}")
 FUSION_MIN_PRECISION = float(os.getenv("REALWORLD_FUSION_MIN_PRECISION", "0.72"))
+# The calibrated Board threshold refines the Judge's own >= 0.5 majority vote
+# upward for precision. It is never allowed below that vote: on v10's noisy dev
+# split an unconstrained max-MCC search chose 0.2 and convicted functions the
+# Judge had voted NOT_VULNERABLE.
+BOARD_MIN_PRECISION = float(os.getenv("REALWORLD_BOARD_MIN_PRECISION", "0.60"))
+BOARD_MIN_THRESHOLD = float(os.getenv("REALWORLD_BOARD_MIN_THRESHOLD", "0.50"))
+# static_strength stand-in for a Board candidate that has no static finding.
+SCREEN_STRENGTH_CAP = 0.25
 _SEVERITY = {"critical": 1.0, "high": 0.75, "medium": 0.5, "low": 0.25}
 
 
@@ -63,7 +71,9 @@ def features(record: dict, kind: str = "board") -> list[float] | None:
     findings_key, board_key, p_key, _ = _KEYS[kind]
     findings = record.get(findings_key) or []
     board = record.get(board_key)
-    if not findings or not board:
+    # A Board verdict is what the model scores. Soft-LLM-Screen (Track 2)
+    # candidates can have no static findings, and must not be dropped here.
+    if not board:
         return None
     has_semgrep = bool(record.get("semgrep_pred")) or any(f.get("tool") == "semgrep" for f in findings)
     has_bandit = bool(record.get("bandit_pred")) or any(
@@ -76,9 +86,14 @@ def features(record: dict, kind: str = "board") -> list[float] | None:
         f.get("tool") == "codeql" or f.get("also_codeql") for f in findings
     )
     tool_count = int(has_semgrep) + int(has_bandit) + int(has_ast) + int(has_codeql)
-    max_sev = max(_SEVERITY.get(f.get("severity"), 0.0) for f in findings)
     multi_tool = 1.0 if tool_count >= 2 else 0.0
-    static_strength = 0.5 * max_sev + 0.5 * multi_tool
+    if findings:
+        max_sev = max(_SEVERITY.get(f.get("severity"), 0.0) for f in findings)
+        static_strength = 0.5 * max_sev + 0.5 * multi_tool
+    else:
+        # No static lead: the screen's own score stands in, capped well below a
+        # real finding so it cannot outrank one.
+        static_strength = SCREEN_STRENGTH_CAP * _num(record.get("llm_context_p"), 0.5)
     x = [
         _num(record.get(p_key), 0.5),
         _num(board.get("defender_safety"), 0.5),
@@ -115,15 +130,25 @@ def metric(tp: int, fp: int, fn: int, tn: int, name: str = "") -> float:
     return (tp * tn - fp * fn) / denom if denom else 0.0
 
 
-def best_threshold(scores: list[float | None], labels: list[int], min_precision: float = 0.0) -> float | None:
+def best_threshold(
+    scores: list[float | None],
+    labels: list[int],
+    min_precision: float = 0.0,
+    min_threshold: float = 0.0,
+) -> float | None:
     """Threshold on the scores that maximises CALIBRATION_METRIC over every
     function in the split; ties keep the stricter threshold. When
     `min_precision > 0`, prefers thresholds achieving at least `min_precision`
     (with >= 10% recall on flagged positives) if any such threshold has
-    positive discrimination."""
+    positive discrimination. Candidates below `min_threshold` are never
+    chosen; if no score reaches it, `min_threshold` itself is returned."""
     candidates = sorted({s for s in scores if s is not None}, reverse=True)
     if not candidates:
         return None
+    if min_threshold > 0:
+        candidates = [c for c in candidates if c >= min_threshold]
+        if not candidates:
+            return min_threshold
     flagged_pos = sum(1 for s, y in zip(scores, labels) if s is not None and y == 1)
     min_tp = max(3, int(0.15 * flagged_pos))
     best, best_value = None, -math.inf

@@ -328,7 +328,7 @@ class AdversarialBoard:
         # Legacy mode: Track 1 uses the SAST packet, Track 2 an Attacker LLM.
         use_attacker_llm = not PROSECUTOR_REBUTTAL and (USE_LLM_ATTACKER or track == TRACK_LLM_SCREEN)
         if PROSECUTOR_REBUTTAL and track == TRACK_LLM_SCREEN:
-            attacker = synthesize_screen_indictment(suspicion, screen_p)
+            attacker = synthesize_screen_indictment(suspicion, screen_p, findings)
         elif use_attacker_llm:
             atk_prompt = build_function_attacker_prompt(
                 function_name, def_code_text, findings, "", track=track
